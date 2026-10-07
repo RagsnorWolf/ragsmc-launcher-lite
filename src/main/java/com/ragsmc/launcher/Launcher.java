@@ -726,7 +726,6 @@ public class Launcher {
             for (InstanceStore.Instance in : all) {
                 names.add(in.name);
             }
-            window.getHomeView().setRecent(names);
             String selectId = all.isEmpty() ? null : all.get(0).id;
             window.getPlayView().setInstances(all, selectId);
             updateHomeCards(all);
@@ -952,17 +951,6 @@ public class Launcher {
             launchSelected();
         });
         window.getHomeView().setOnShowInstallations(() -> window.showView("installations"));
-        try {
-            File newsFile = new File(AppDirs.dataDir(), "news.json");
-            NewsManager nm = new NewsManager(newsFile);
-            List<NewsManager.NewsEntry> entries = nm.load();
-            List<String> items = new ArrayList<>();
-            for (NewsManager.NewsEntry e : entries) {
-                items.add(e.title + (e.description != null && !e.description.isEmpty() ? " - " + e.description : ""));
-            }
-            window.getHomeView().setNews(items);
-        } catch (Exception ignored) {
-        }
     }
 
     private void wireMods() {
