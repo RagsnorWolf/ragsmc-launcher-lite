@@ -69,11 +69,23 @@ public class HomePlayView extends JPanel {
         if (titleIcon != null) {
             title = new JLabel(titleIcon, SwingConstants.CENTER);
         } else {
-            title = new JLabel("MINECRAFT", SwingConstants.CENTER);
+            title = new JLabel("MINECRAFT", SwingConstants.CENTER) {
+                @Override
+                public void doLayout() {
+                    super.doLayout();
+                    int w = getWidth();
+                    if (w > 0) {
+                        float size = Math.min(44f, Math.max(20f, w / 9.5f));
+                        setFont(getFont().deriveFont(size));
+                    }
+                }
+            };
             title.setFont(new Font("Segoe UI", Font.BOLD, 44));
             title.setForeground(Colors.NEON_GREEN);
         }
         title.setAlignmentX(CENTER_ALIGNMENT);
+        title.setHorizontalAlignment(SwingConstants.CENTER);
+        title.setHorizontalTextPosition(SwingConstants.CENTER);
         content.add(title);
         content.add(Box.createRigidArea(new Dimension(0, 6)));
         JLabel subtitle = new JLabel("CREA - EXPLORA - SOBREVIVE", SwingConstants.CENTER);
