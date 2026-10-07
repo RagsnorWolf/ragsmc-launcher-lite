@@ -1,0 +1,11 @@
+target/
+*.jar
+*.pfx
+*.log
+opengl32.dll
+libgallium_wgl.dll
+libglapi.dll
+custom-jre/
+.idea/
+.vscode/
+*.class
