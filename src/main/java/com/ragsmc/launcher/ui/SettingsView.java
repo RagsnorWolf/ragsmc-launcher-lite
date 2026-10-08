@@ -2,6 +2,7 @@ package com.ragsmc.launcher.ui;
 
 import com.ragsmc.launcher.hardware.GpuDetector;
 import com.ragsmc.launcher.hardware.GpuDedicatedHelper;
+import com.ragsmc.launcher.hardware.MesaDownloader;
 import com.ragsmc.launcher.ui.theme.Colors;
 import com.ragsmc.launcher.util.SystemInfo;
 import java.awt.BorderLayout;
@@ -326,6 +327,22 @@ public class SettingsView extends JPanel {
         form.add(gpuBox);
         mesaBox = new JCheckBox("Forzar CPU - render por software (Mesa, GPUs muy viejas)");
         styleCheck(mesaBox);
+        if (!com.ragsmc.launcher.hardware.MesaDownloader.isConfigured()) {
+            mesaBox.setEnabled(false);
+            mesaBox.setToolTipText("Mesa no configurado (falta URL y SHA-256 en el codigo)");
+        }
+        mesaBox.addActionListener(e -> {
+            if (mesaBox.isSelected()) {
+                int r = JOptionPane.showConfirmDialog(this,
+                    "Modo Mesa: Minecraft correra por software (CPU). Es MUY lento pero funciona en GPUs que no soportan OpenGL 3.2. ¿Continuar?",
+                    "Confirmar modo Mesa",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+                if (r != JOptionPane.YES_OPTION) {
+                    mesaBox.setSelected(false);
+                }
+            }
+        });
         form.add(mesaBox);
         form.add(Box.createRigidArea(new Dimension(0, 10)));
         form.add(sectionLabel("Red"));

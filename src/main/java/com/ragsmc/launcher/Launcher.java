@@ -6,6 +6,7 @@ import com.ragsmc.launcher.auth.OfflineUuid;
 import com.ragsmc.launcher.config.NewsManager;
 import com.ragsmc.launcher.hardware.GpuDetector;
 import com.ragsmc.launcher.hardware.GpuDedicatedHelper;
+import com.ragsmc.launcher.hardware.MesaDownloader;
 import com.ragsmc.launcher.config.Settings;
 import com.ragsmc.launcher.config.SettingsPersistence;
 import com.ragsmc.launcher.minecraft.InstanceStore;
@@ -434,6 +435,24 @@ public class Launcher {
         }
         // Pass mesaCpu to LaunchConfig for MinecraftLauncher
         cfg.setMesaCpu(adv.mesaCpu);
+        // Apply Mesa DLLs to Java executable if enabled
+        if (adv.mesaCpu && isWindowsOs()) {
+            if (!MesaDownloader.isMesaAvailable()) {
+                // Download Mesa in background (will block launch until done)
+                window.getPlayView().setStatus("Descargando Mesa (render por software)...");
+                try {
+                    MesaDownloader.download((msg, frac) -> {
+                        javax.swing.SwingUtilities.invokeLater(() -> window.getPlayView().setStatus(msg));
+                    });
+                } catch (Exception ex) {
+                    showError("Error descargando Mesa", ex.getMessage());
+                    window.getPlayView().setLaunching(false);
+                    window.getPlayView().setStatus("Error al descargar Mesa");
+                    return;
+                }
+            }
+            MesaDownloader.applyToJava(javaPath);
+        }
         final boolean hideOnLaunch = adv.hideOnLaunch;
         final ConsoleView console = window.getConsoleView();
         final String user = username;
@@ -1024,6 +1043,8 @@ public class Launcher {
                 s.customGameArgs != null ? s.customGameArgs : "");
         window.getSettingsView().setOnSave(d -> {
             Settings cur = settingsPersistence.load();
+            boolean oldGpu = cur.gpuDedicated;
+            boolean oldMesa = cur.mesaCpu;
             cur.javaPath = d.javaPath;
             cur.ramMb = d.ramMb;
             cur.hideOnLaunch = d.hideOnLaunch;
@@ -1034,6 +1055,18 @@ public class Launcher {
             cur.customGameArgs = d.gameArgs;
             try {
                 settingsPersistence.save(cur);
+                // Apply GPU dedicated changes
+                if (d.gpuDedicated && !oldGpu && isWindowsOs()) {
+                    GpuDedicatedHelper.enableForAllKnownJava();
+                } else if (!d.gpuDedicated && oldGpu) {
+                    GpuDedicatedHelper.disableForAllKnownJava();
+                }
+                // Apply/Remove Mesa DLLs
+                if (d.mesaCpu && !oldMesa && isWindowsOs()) {
+                    // Will be applied on next launch
+                } else if (!d.mesaCpu && oldMesa) {
+                    MesaDownloader.removeFromAllJava();
+                }
                 window.getConsoleView().appendLine("Ajustes guardados: RAM " + d.ramMb + " MB, Java " + (d.javaPath.isEmpty() ? "auto" : d.javaPath));
             } catch (Exception ex) {
                 showError("No se pudo guardar", ex.getMessage());
