@@ -4,6 +4,7 @@ import com.ragsmc.launcher.auth.Account;
 import com.ragsmc.launcher.auth.AuthManager;
 import com.ragsmc.launcher.auth.OfflineUuid;
 import com.ragsmc.launcher.config.NewsManager;
+import com.ragsmc.launcher.hardware.GpuDetector;
 import com.ragsmc.launcher.config.Settings;
 import com.ragsmc.launcher.config.SettingsPersistence;
 import com.ragsmc.launcher.minecraft.InstanceStore;
@@ -331,6 +332,34 @@ public class Launcher {
             final long t1 = System.nanoTime();
             javax.swing.SwingUtilities.invokeLater(() -> {
                 com.ragsmc.launcher.util.Logger.info("T verificacion bg en " + ((t1 - t0) / 1000000) + "ms, faltante=" + missing);
+                // GPU / OpenGL warning for versions >= 1.17
+                if (requiresOpenGL32(in.version)) {
+                    GpuDetector.GpuInfo gpu = GpuDetector.detect();
+                    try {
+                        double maxGL = Double.parseDouble(gpu.openglMax);
+                        if (maxGL < 3.2) {
+                            String msg = "Tu GPU (" + gpu.name + ") soporta OpenGL " + gpu.openglMax + ". Minecraft " + in.version + " requiere OpenGL 3.2+. Se activara modo Mesa automaticamente (mas lento pero funciona).";
+                            javax.swing.JCheckBox noWarn = new javax.swing.JCheckBox("No volver a avisar");
+                            Object[] options = {msg, noWarn};
+                            int result = javax.swing.JOptionPane.showConfirmDialog(window, options, "Advertencia de compatibilidad", javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE);
+                            if (result != javax.swing.JOptionPane.OK_OPTION) {
+                                window.getPlayView().setLaunching(false);
+                                window.getPlayView().setStatus("Lanzamiento cancelado por el usuario.");
+                                return;
+                            }
+                            if (noWarn.isSelected()) {
+                                new com.ragsmc.launcher.config.SettingsPersistence().saveGpuWarnSuppressed(true);
+                            }
+                            // Enable Mesa automatically
+                            com.ragsmc.launcher.config.Settings settings = new com.ragsmc.launcher.config.SettingsPersistence().load();
+                            if (!settings.mesaCpu) {
+                                settings.mesaCpu = true;
+                                new com.ragsmc.launcher.config.SettingsPersistence().save(settings);
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
                 if (!missing.isEmpty()) {
                     window.getPlayView().setStatus("Descargando " + in.version + " (" + String.join(", ", missing) + ")...");
                     window.getConsoleView().appendLine("Falta descargar para " + in.version + ": " + String.join(", ", missing));
@@ -351,6 +380,22 @@ public class Launcher {
         }, "mc-verify");
         checker.setDaemon(true);
         checker.start();
+    }
+
+    private boolean requiresOpenGL32(String version) {
+        if (version == null) {
+            return false;
+        }
+        String v = version.trim();
+        try {
+            // 1.17+ requires OpenGL 3.2
+            String[] parts = v.split("[.-]");
+            int major = parts.length > 0 ? Integer.parseInt(parts[0]) : 0;
+            int minor = parts.length > 1 ? Integer.parseInt(parts[1].replaceAll("[^0-9]", "")) : 0;
+            return major > 1 || (major == 1 && minor >= 17);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void buildAndLaunch(InstanceStore.Instance in, String username, String javaPath, long t0, String serverIp, int serverPort) {
