@@ -29,6 +29,8 @@ public class MainWindow extends JFrame {
     private final SettingsView settingsView;
     private final ConsoleView consoleView;
 
+    private String currentViewName = "home";
+
     public MainWindow() {
         setTitle("RagsMC Launcher");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -112,7 +114,33 @@ public class MainWindow extends JFrame {
         return viewName;
     }
 
+    private void disposePreviousView(String newViewName) {
+        // Clean up heavy resources from previous view
+        String current = currentViewName;
+        if (current != null && !current.equals(newViewName)) {
+            switch (current) {
+                case "installations":
+                    if (installationsView != null) {
+                        installationsView.cleanup();
+                    }
+                    break;
+                case "settings":
+                    if (settingsView != null) {
+                        settingsView.cleanup();
+                    }
+                    break;
+                case "resources":
+                    if (recursosView != null) {
+                        recursosView.cleanup();
+                    }
+                    break;
+            }
+        }
+        currentViewName = newViewName;
+    }
+
     private void switchView(String viewName) {
+        disposePreviousView(viewName);
         if (viewName != null && viewName.equals("play")) {
             homePlayView.scrollToBottom();
         } else if (viewName != null && viewName.equals("home")) {

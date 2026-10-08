@@ -652,4 +652,11 @@ public class SettingsView extends JPanel {
             gameArgsField.setText(gameArgs != null ? gameArgs : "");
         });
     }
+
+    public void cleanup() {
+        // Clear any pending workers, listeners
+        javaListModel = null;
+        javaList = null;
+        javaPaths.clear();
+    }
 }

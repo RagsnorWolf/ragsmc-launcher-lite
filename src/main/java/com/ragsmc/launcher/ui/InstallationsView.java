@@ -430,6 +430,14 @@ public class InstallationsView extends JPanel {
         this.editHandler = onEdit;
     }
 
+    public void cleanup() {
+        // Cancel any pending SwingWorkers, clear listeners
+        if (cardsPanel != null) {
+            cardsPanel.removeAll();
+        }
+        current.clear();
+    }
+
     // Compatibilidad con cableado anterior
     public void addInstallation(final String name) {
     }

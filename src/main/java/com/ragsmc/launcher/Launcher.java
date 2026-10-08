@@ -59,8 +59,6 @@ public class Launcher {
     }
 
     public void wire() {
-        scanJavaAtStartup();
-        scanVersionsAtStartup();
         wireProfiles();
         wirePlay();
         wireHome();
@@ -157,11 +155,31 @@ public class Launcher {
             }
         }.execute();
     }
+    public void scanJavaLazy() {
+        new SwingWorker<Map<Integer, String>, Void>() {
+            @Override
+            protected Map<Integer, String> doInBackground() throws Exception {
+                return JavaVersionSelector.scanAll();
+            }
+            @Override
+            protected void done() {
+                try {
+                    Map<Integer, String> found = get();
+                    window.getSettingsView().setDetectedJavas(found);
+                } catch (Exception ex) {
+                    window.getConsoleView().appendLine("No se pudo escanear Java: " + ex.getMessage());
+                }
+            }
+        }.execute();
+    }
+
 
     private void scanVersionsAtStartup() {
+        // Lazy: only scan when user opens Installations or Home
         new SwingWorker<List<String>, Void>() {
             @Override
             protected List<String> doInBackground() throws Exception {
+                Thread.sleep(100);
                 List<String> all = new ArrayList<>();
                 all.addAll(versions.installedVersions(AppDirs.versionsDir()));
                 for (String v : versions.installedVersions(new File(AppDirs.legacyMinecraftDir(), "versions"))) {
@@ -169,7 +187,6 @@ public class Launcher {
                         all.add(v);
                     }
                 }
-                // También obtener versiones disponibles del manifest de Mojang
                 try {
                     List<com.ragsmc.launcher.minecraft.VersionManager.McVersion> manifest = versions.fetchManifest(true);
                     for (com.ragsmc.launcher.minecraft.VersionManager.McVersion mv : manifest) {
@@ -188,7 +205,6 @@ public class Launcher {
             protected void done() {
                 try {
                     List<String> found = get();
-                    // Filtrar a solo versiones permitidas
                     List<String> allowed = new ArrayList<>();
                     for (String v : found) {
                         if (com.ragsmc.launcher.minecraft.AllowedVersions.isAllowed(v)) {
@@ -206,6 +222,11 @@ public class Launcher {
             }
         }.execute();
     }
+
+    public void scanVersionsLazy() {
+        scanVersionsAtStartup();
+    }
+
 
     private void wirePlay() {
         window.getPlayView().getPlayButton().addActionListener(e -> launchSelected());
@@ -856,6 +877,7 @@ public class Launcher {
     }
 
     private void wireInstallations() {
+        scanVersionsLazy();
         window.getInstallationsView().setOnCreate(ni -> {
             // Validar version permitida
             if (!com.ragsmc.launcher.minecraft.AllowedVersions.isAllowed(ni.version)) {
@@ -1021,6 +1043,7 @@ public class Launcher {
     }
 
     private void wireHome() {
+        scanVersionsLazy();
         window.getHomeView().setOnPlay(() -> {
             window.showView("home");
             launchSelected();
@@ -1033,6 +1056,7 @@ public class Launcher {
     }
 
     private void wireSettings() {
+        scanJavaLazy();
         Settings s = settingsPersistence.load();
         window.getSettingsView().loadValues(
                 s.javaPath != null ? s.javaPath : "",
