@@ -5,6 +5,7 @@ import com.ragsmc.launcher.auth.AuthManager;
 import com.ragsmc.launcher.auth.OfflineUuid;
 import com.ragsmc.launcher.config.NewsManager;
 import com.ragsmc.launcher.hardware.GpuDetector;
+import com.ragsmc.launcher.hardware.GpuDedicatedHelper;
 import com.ragsmc.launcher.config.Settings;
 import com.ragsmc.launcher.config.SettingsPersistence;
 import com.ragsmc.launcher.minecraft.InstanceStore;
@@ -382,6 +383,10 @@ public class Launcher {
         checker.start();
     }
 
+    private static boolean isWindowsOs() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
     private boolean requiresOpenGL32(String version) {
         if (version == null) {
             return false;
@@ -423,6 +428,12 @@ public class Launcher {
         if (adv.customGameArgs != null && !adv.customGameArgs.trim().isEmpty()) {
             cfg.setGameArgs(adv.customGameArgs.trim());
         }
+        // Apply GPU dedicated setting (Windows registry)
+        if (adv.gpuDedicated && isWindowsOs()) {
+            GpuDedicatedHelper.enableForJava(javaPath);
+        }
+        // Pass mesaCpu to LaunchConfig for MinecraftLauncher
+        cfg.setMesaCpu(adv.mesaCpu);
         final boolean hideOnLaunch = adv.hideOnLaunch;
         final ConsoleView console = window.getConsoleView();
         final String user = username;

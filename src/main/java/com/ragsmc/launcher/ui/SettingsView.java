@@ -1,6 +1,7 @@
 package com.ragsmc.launcher.ui;
 
 import com.ragsmc.launcher.hardware.GpuDetector;
+import com.ragsmc.launcher.hardware.GpuDedicatedHelper;
 import com.ragsmc.launcher.ui.theme.Colors;
 import com.ragsmc.launcher.util.SystemInfo;
 import java.awt.BorderLayout;
@@ -312,6 +313,16 @@ public class SettingsView extends JPanel {
         form.add(sectionLabel("Video"));
         gpuBox = new JCheckBox("Forzar GPU dedicada (laptops con 2 GPUs)");
         styleCheck(gpuBox);
+        // Check for dedicated GPU
+        boolean hasDedicated = false;
+        try {
+            hasDedicated = com.ragsmc.launcher.hardware.GpuDedicatedHelper.hasDedicatedGpu();
+        } catch (Exception ignored) {
+        }
+        if (!hasDedicated) {
+            gpuBox.setEnabled(false);
+            gpuBox.setToolTipText("No se detecto GPU dedicada");
+        }
         form.add(gpuBox);
         mesaBox = new JCheckBox("Forzar CPU - render por software (Mesa, GPUs muy viejas)");
         styleCheck(mesaBox);
