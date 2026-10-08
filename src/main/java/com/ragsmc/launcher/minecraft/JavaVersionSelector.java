@@ -1,9 +1,12 @@
 package com.ragsmc.launcher.minecraft;
 
 import java.io.File;
+import java.io.FileReader;
+import java.io.BufferedReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 
 public final class JavaVersionSelector {
 
@@ -191,7 +194,7 @@ public final class JavaVersionSelector {
             if (!runtimeBase.isDirectory()) {
                 return;
             }
-            // Rutas exactas de runtimes de Mojang
+            // Rutas exactas de runtimes de Mojang (javaw.exe)
             String[][] exactPaths = {
                 {"jre-legacy", "windows-x64", "jre-legacy", "bin", "javaw.exe"},
                 {"java-runtime-alpha", "windows-x64", "java-runtime-alpha", "bin", "javaw.exe"},
@@ -206,8 +209,11 @@ public final class JavaVersionSelector {
                 }
                 if (bin.isFile()) {
                     try {
-                        int major = probeMajor(bin.getAbsolutePath());
-                        found.putIfAbsent(major, bin.getAbsolutePath());
+                        int major = readMojangRuntimeMajor(bin);
+                        if (major > 0) {
+                            found.putIfAbsent(major, bin.getAbsolutePath());
+                            System.out.println("[JavaScanner] Encontrado: Java " + major + " en " + bin.getAbsolutePath());
+                        }
                     } catch (Exception ignored) {
                     }
                 }
@@ -217,12 +223,37 @@ public final class JavaVersionSelector {
             collectJavaBins(runtimeBase, bins, 4);
             for (File bin : bins) {
                 try {
-                    found.putIfAbsent(probeMajor(bin.getAbsolutePath()), bin.getAbsolutePath());
+                    int major = probeMajor(bin.getAbsolutePath());
+                    found.putIfAbsent(major, bin.getAbsolutePath());
                 } catch (Exception ignored) {
                 }
             }
         } catch (Exception ignored) {
         }
+    }
+
+    private static int readMojangRuntimeMajor(File javawExe) throws Exception {
+        try {
+            File runtimeDir = javawExe.getParentFile().getParentFile(); // .../jre-legacy/
+            File releaseFile = new File(runtimeDir, "release");
+            if (releaseFile.isFile()) {
+                Properties props = new Properties();
+                try (FileReader fr = new FileReader(releaseFile)) {
+                    props.load(fr);
+                }
+                String version = props.getProperty("JAVA_VERSION", "");
+                if (!version.isEmpty()) {
+                    // Parsear "8", "17", "21", "17.0.8", etc.
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(version);
+                    if (m.find()) {
+                        return Integer.parseInt(m.group(1));
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // Fallback: probe via java -version
+        return probeMajor(javawExe.getAbsolutePath());
     }
 
     private static void collectJavaBins(File dir, List<File> out, int depth) {
@@ -268,9 +299,9 @@ public final class JavaVersionSelector {
         }
         scanMojangRuntimes(found);
         String[] baseDirs = {
+            "C:/Program Files/Eclipse Adoptium",
             "C:/Program Files/Java",
             "C:/Program Files (x86)/Java",
-            "C:/Program Files/Eclipse Adoptium",
             "C:/Program Files/Microsoft",
             "C:/Program Files/Semeru",
             "/usr/lib/jvm",
@@ -292,6 +323,7 @@ public final class JavaVersionSelector {
                 }
             }
         }
+        System.out.println("[JavaScanner] Total: " + found.size() + " JDKs detectados");
         return found;
     }
 }
