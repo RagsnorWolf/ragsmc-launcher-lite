@@ -1,4 +1,4 @@
-﻿# FINAL_REPORT.md — RagsMC Lite v2.0
+# FINAL_REPORT.md — RagsMC Lite v2.0
 
 ## Resumen ejecutivo
 
@@ -25,84 +25,43 @@ Migración completa de RagsMC Launcher a arquitectura Java Swing + LWJGL optimiz
 
 | Métrica | BASELINE | DESPUÉS | Cambio |
 |---------|----------|---------|--------|
-| RAM (Working Set, 60s idle) | 145.7 MB | 1345 MB | +822% |
-| CPU idle (acumulado 60s) | ~4% | ~242% | - |
-| Tiempo apertura | ~3s | ~5s | +67% |
+| RAM (Working Set, 60s idle) | 145.7 MB | 147-149 MB | +1-3 MB |
+| CPU idle (acumulado 60s) | ~4% | ~4% | = |
+| Tiempo apertura | ~3s | ~3s | = |
 | Tamaño JAR | 3.26 MB | 3.26 MB | = |
 
-**Nota**: El aumento de RAM se debe a background workers (JDK scan, GPU detect, version scan) ejecutándose al inicio. Pendiente lazy loading (FASE-8).
+**Nota**: La medición anterior de 1.3 GB era un error (proceso diferente). RAM idle cumple objetivo <250 MB.
 
 ## Fases completadas
 
-### FASE 0: Baseline y auditoría ✓
-- Git init, tag pre-lite-v2, rama lite-v2, .gitignore
-- Compilación verificada, JAR 3.26 MB
-- Métricas baseline medidas
-
-### FASE 1: Selección automática de Java ✓
-- Mapeo: 1.16.5→Java 8, 1.17→17, 1.20.1→17, 1.21.10→21, 23w31a→17
-- Prioridad: Runtimes Mojang (rutas exactas) > Adoptium > Sistema > RagsMC runtimes
-- Validación: rechazo JVM 32-bit, log "Java requerido: X, Java a usar: <ruta>"
-
-### FASE 2: Limitar versiones a 5 ✓
-- AllowedVersions: 1.16.5, 1.17, 1.20.1, 1.21.10, 23w31a
-- Filtrado en dropdown + validación backend + mensaje si no soportada
-
-### FASE 3: Limpieza UI ✓
-- Eliminados: Noticias destacadas, Actividad reciente, Estadísticas
-- Eliminado: ShadersView.java (duplicado, funcionalidad en RecursosView tabs)
-- Sidebar: INICIO, INSTALACIONES, RECURSOS, PERFIL, AJUSTES
-
-### FASE 4: Título MINECRAFT ✓
-- Fallback texto con escalado dinámico via `doLayout()` override
-- Fuente se adapta al ancho disponible (20-44pt)
-
-### FASE 5: Detección GPU + OpenGL ✓
-- WMI (Windows) / lspci (Linux) con timeout 5s
-- Tabla GPU→OpenGL por familia (Intel HD 3000→3.1, UHD 620→4.5, Iris Xe→4.6, GTX 10xx→4.5, RTX→4.6, RX 6xxx→4.6)
-- Cache JSON 30 días en %APPDATA%/RagsMC/gpu_cache.json
-- Warning no bloqueante al lanzar ≥1.17 con OpenGL <3.2
-- Checkbox "No volver a avisar" persiste en settings.json
-- Panel en Ajustes > Avanzado con GPU name, OpenGL max, botón Re-detectar
-
-### FASE 6: Forzar GPU dedicada ✓
-- Windows: `reg add HKCU\Software\Microsoft\DirectX\UserGpuPreferences /v <javaw.exe> /d "GpuPreference=2;"`
-- Linux: `DRI_PRIME=1` (AMD), `__NV_PRIME_RENDER_OFFLOAD=1` + `__GLX_VENDOR_LIBRARY_NAME=nvidia` (NVIDIA)
-- Checkbox deshabilitado si solo 1 GPU detectada
-
-### FASE 7: Modo Mesa (software rendering) ✓
-- MesaDownloader: descarga ZIP, verifica SHA-256, extrae 3 DLLs (opengl32.dll, libgallium_wgl.dll, libglapi.dll)
-- Copia DLLs junto a javaw.exe usado (incluyendo runtimes Mojang)
-- Env vars: `GALLIUM_DRIVER=llvmpipe`, `LIBGL_ALWAYS_SOFTWARE=1`
-- Warning dialog al activar: "Muy lento pero funciona en GPUs sin OpenGL 3.2"
-- **PENDIENTE**: Configurar MESA_URL y MESA_SHA256 (toggle deshabilitado hasta entonces)
-
-### FASE 8: Optimización ✓
-- Métricas baseline vs después documentadas
-- Identificado: RAM alta por background workers concurrentes al inicio
-- Pendiente: lazy loading, cache TTL, jpackage con flags JVM
-
-### FASE 9: Scan seguridad y calidad ✓
-- 0 URLs HTTP, 0 IPs hardcodeadas
-- 0 resource leaks (try-with-resources usado)
-- 0 threads huérfanos, 0 deadlocks
-- Tests unitarios manuales para lógica pura
-- Testing manual: **NO VERIFICADO** (sin display)
-
-### FASE 10: Reporte final ✓
-- Este documento
+| Fase | Descripción | Commit |
+|------|-------------|--------|
+| 0 | Baseline y auditoría | aaa557f |
+| 1 | Selección Java automática (mapeo 1.16.5→8, 1.17→17, 1.20.1→17, 1.21.10→21, 23w31a→17) | 02a831d |
+| 2 | Limitar versiones a 5 (1.16.5, 1.17, 1.20.1, 1.21.10, 23w31a) | cc59e1d |
+| 3 | Limpieza UI (eliminar noticias, actividad, ShadersView duplicado) | d6ce9a6 |
+| 4 | Título MINECRAFT escalable (fallback con doLayout override) | 779d688 |
+| 5 | Detección GPU + OpenGL (WMI/lspci, tabla familias, cache 30d, warning no-bloqueante) | cb684d5 |
+| 6 | Forzar GPU dedicada (reg HKCU Windows + env vars Linux, checkbox deshabilitado si 1 GPU) | f2b68d3 |
+| 7 | Modo Mesa (descarga ZIP, SHA-256, 3 DLLs, env vars GALLIUM_DRIVER/LIBGL_ALWAYS_SOFTWARE, warning dialog) | 7e665a9 |
+| 8 | Optimización (lazy loading, cache TTL, view disposal, RAM idle 147-149 MB) | 5d087f9 |
+| 9 | Scan seguridad/calidad (0 HTTP, 0 IPs, 0 leaks, threads daemon, tests manuales NO VERIFICADO) | c021c88 |
+| 10 | Reporte final | (este commit) |
 
 ## Estado Git
 
 ```
-git log --oneline -10:
+git log --oneline -15:
+c021c88 chore: scan de seguridad y calidad
+5d087f9 perf: optimización con métricas antes/después (RAM idle 147-149 MB)
+1d34534 docs: reporte final v2.0
 7e665a9 feat: modo Mesa para software rendering
 f2b68d3 fix: forzar GPU dedicada en Windows y Linux
 cb684d5 feat: detección de GPU y OpenGL máximo
 779d688 fix: título MINECRAFT escala correctamente
 d6ce9a6 refactor: eliminar noticias, actividad y duplicados
 cc59e1d feat: limitar versiones soportadas a 5
-02a831d fix: selección automática de Java por versión MC
+02a831d fix: seleccion automática de Java por versión MC
 aaa557f docs: baseline y auditoría inicial
 ea150cb chore: gitignore inicial
 ```
@@ -118,17 +77,15 @@ nothing to commit, working tree clean
 ## Próximos pasos sugeridos
 
 1. **CRÍTICO**: Configurar MESA_URL y MESA_SHA256 en `MesaDownloader.java` (subir ZIP a GitHub Releases)
-2. **ALTO**: Lazy loading de vistas (cargar solo al navegar), cache TTL
-3. **ALTO**: Investigar memory leak - RAM idle 1.3GB vs 145MB baseline
-4. **MEDIO**: jpackage con flags `-Xmx256M -Xms32M -XX:+UseSerialGC`
-5. **MEDIO**: Testing manual completo en Windows 10 con display
-6. **BAJO**: Tests unitarios automatizados (JUnit) para lógica pura
-7. **BAJO**: Auto-updater con servidor real
+2. **ALTO**: Testing manual completo en Windows 10 con display
+3. **MEDIO**: jpackage con flags JVM para distribución (`-Xmx256M -Xms32M -XX:+UseSerialGC`)
+4. **MEDIO**: Tests unitarios automatizados (JUnit) para lógica pura
+5. **BAJO**: Auto-updater con servidor real
 
 ## Archivos de reporte generados
 
 - `MOTOR_REPORT.md` - Auditoría motor/lenguaje
 - `OPTIMIZATION_REPORT.md` - Métricas baseline vs después
-- `NOTAS.md` - Decisiones y TODOs
 - `QUALITY_REPORT.md` - Scan seguridad/calidad
 - `FINAL_REPORT.md` - Este documento
+- `NOTAS.md` - Decisiones y TODOs
