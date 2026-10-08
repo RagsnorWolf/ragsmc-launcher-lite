@@ -1120,14 +1120,20 @@ public class Launcher {
     private void downloadJavaDialog(int major) {
         JDialog dlg = new JDialog(window, "Descargando Java " + major, true);
         dlg.setLayout(new BorderLayout(10, 10));
-        dlg.setSize(420, 140);
+        dlg.setSize(480, 180);
         dlg.setLocationRelativeTo(window);
         JLabel label = new JLabel("Conectando con Adoptium...");
         JProgressBar bar = new JProgressBar(0, 100);
         bar.setStringPainted(true);
         bar.setIndeterminate(true);
+        JLabel speedLabel = new JLabel("");
+        speedLabel.setForeground(Colors.TEXT_SECONDARY);
+        speedLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         javax.swing.JButton cancel = new javax.swing.JButton("Cancelar");
-        dlg.add(label, BorderLayout.NORTH);
+        JPanel top = new JPanel(new BorderLayout(10, 5));
+        top.add(label, BorderLayout.NORTH);
+        top.add(speedLabel, BorderLayout.SOUTH);
+        dlg.add(top, BorderLayout.NORTH);
         dlg.add(bar, BorderLayout.CENTER);
         dlg.add(cancel, BorderLayout.SOUTH);
         AtomicBoolean cancelled = new AtomicBoolean(false);
@@ -1136,6 +1142,7 @@ public class Launcher {
             cancel.setEnabled(false);
             cancel.setText("Cancelando...");
         });
+        final long startTime = System.nanoTime();
         SwingWorker<String, String> worker = new SwingWorker<String, String>() {
             @Override
             protected String doInBackground() throws Exception {
@@ -1162,11 +1169,22 @@ public class Launcher {
                     try {
                         long done = Long.parseLong(c.substring(0, sep));
                         long total = Long.parseLong(c.substring(sep + 1));
-                        if (total > 0) {
-                            int pct = (int) (done * 100 / total);
-                            bar.setIndeterminate(false);
-                            bar.setValue(Math.max(0, Math.min(100, pct)));
-                            label.setText(String.format("%.1f / %.1f MB", done / 1048576.0, total / 1048576.0));
+                        long elapsedMs = (System.nanoTime() - startTime) / 1_000_000;
+                        if (elapsedMs > 0) {
+                            double speedMBs = (done / 1048576.0) / (elapsedMs / 1000.0);
+                            if (total > 0) {
+                                int pct = (int) (done * 100 / total);
+                                bar.setIndeterminate(false);
+                                bar.setValue(Math.max(0, Math.min(100, pct)));
+                                double remainingMB = (total - done) / 1048576.0;
+                                double etaSec = speedMBs > 0 ? remainingMB / speedMBs : -1;
+                                String etaStr = etaSec > 0 ? String.format("ETA: %.0fs", etaSec) : "";
+                                label.setText(String.format("%.1f / %.1f MB", done / 1048576.0, total / 1048576.0));
+                                speedLabel.setText(String.format("%.2f MB/s  %s", speedMBs, etaStr));
+                            } else {
+                                label.setText(String.format("%.1f MB descargados", done / 1048576.0));
+                                speedLabel.setText(String.format("%.2f MB/s", speedMBs));
+                            }
                         } else {
                             label.setText(String.format("%.1f MB descargados", done / 1048576.0));
                         }

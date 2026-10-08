@@ -138,7 +138,7 @@ public class SettingsView extends JPanel {
         JPanel dlRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         dlRow.setBackground(Colors.BACKGROUND);
         dlRow.setAlignmentX(LEFT_ALIGNMENT);
-        for (int v : new int[]{8, 17, 21}) {
+        for (int v : new int[]{8, 17, 21, 25}) {
             JButton dl = new JButton("Java " + v);
             styleGhost(dl);
             final int ver = v;
