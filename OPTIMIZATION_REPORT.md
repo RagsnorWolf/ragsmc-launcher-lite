@@ -7,15 +7,31 @@
 - **Tiempo de apertura**: ~3 segundos (estimado, desde double-click hasta ventana visible)
 - **Tamaño del JAR**: 3.26 MB (shaded)
 
-## DESPUÉS (pendiente — Fase 8)
+## DESPUÉS (Fase 8 - tras cambios)
 
-- **RAM (Working Set)**: ___ MB (baseline: 145.7 MB)
-- **CPU idle**: ___ % (baseline: ~4.06%)
-- **Tiempo de apertura**: ___ s (baseline: ~3 s)
-- **Tamaño del JAR**: ___ MB (baseline: 3.26 MB)
+- **RAM (Working Set)**: 1345 MB (tras 60s idle, baseline: 145.7 MB)
+- **CPU idle**: ~242% tiempo acumulado (baseline: ~4.06%)
+- **Tiempo de apertura**: ~5 segundos (baseline: ~3 s)
+- **Tamaño del JAR**: 3.26 MB (baseline: 3.26 MB)
+
+## Análisis
+
+El uso de RAM aumentó significativamente. Posibles causas:
+- Escaneo de JDK en background (scanAll) retiene clases/metadatos
+- Detección de GPU (WMI) en background
+- Múltiples SwingWorkers concurrentes al inicio
+- Doble llamada a scanVersionsAtStartup()
+
+## Optimizaciones pendientes
+
+- [ ] Lazy loading: no cargar vistas hasta que se navegue
+- [ ] Cache TTL para versiones (24h), instancias (5min), JDKs (1h)
+- [ ] Eliminar polling innecesario
+- [ ] Flags JVM: -Xmx256M -Xms32M -XX:+UseSerialGC via jpackage
+- [ ] Corrección de scanVersionsAtStartup duplicado
 
 ## Notas
 
-- La medición se realizó con el custom JRE (jlink) con módulos: java.base, java.desktop, java.net.http, java.logging, java.xml, java.naming, java.security.jgss, jdk.crypto.ec
-- Flags JVM usados: -Xmx64M -Xms16M -XX:+UseSerialGC -XX:TieredStopAtLevel=1
-- Hardware: Intel Celeron B830 + Intel HD Graphics (Sandy Bridge, OpenGL 3.1) en Windows 10
+- La CPU del 242% es tiempo acumulado total, no % idle instantáneo
+- JAR size sin cambios (3.26 MB shaded)
+- Necesario investigar memory leak en background workers
