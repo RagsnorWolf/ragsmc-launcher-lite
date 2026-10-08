@@ -74,8 +74,12 @@ public class HomePlayView extends JPanel {
                 public void doLayout() {
                     super.doLayout();
                     int w = getWidth();
-                    if (w > 0) {
-                        float size = Math.min(44f, Math.max(20f, w / 9.5f));
+                    int h = getHeight();
+                    if (w > 0 && h > 0) {
+                        // Scale based on both width and height to prevent clipping
+                        float sizeByWidth = Math.min(44f, Math.max(20f, w / 9.5f));
+                        float sizeByHeight = Math.min(44f, Math.max(20f, h * 0.7f));
+                        float size = Math.min(sizeByWidth, sizeByHeight);
                         setFont(getFont().deriveFont(size));
                     }
                 }
