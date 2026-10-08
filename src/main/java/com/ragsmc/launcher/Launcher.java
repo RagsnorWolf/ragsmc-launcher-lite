@@ -1057,6 +1057,7 @@ public class Launcher {
 
     private void wireSettings() {
         scanJavaLazy();
+        window.getSettingsView().setWindow(window);
         Settings s = settingsPersistence.load();
         window.getSettingsView().loadValues(
                 s.javaPath != null ? s.javaPath : "",

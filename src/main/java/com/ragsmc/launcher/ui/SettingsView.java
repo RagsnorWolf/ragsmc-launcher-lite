@@ -10,6 +10,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.util.Map;
+import java.util.List;
 import java.util.TreeMap;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -56,6 +57,7 @@ public class SettingsView extends JPanel {
     private Runnable onRefreshJava;
     private Runnable onApplyRamAll;
     private Consumer<Integer> onDownloadJava;
+    private com.ragsmc.launcher.ui.MainWindow window;
 
     public static class SettingsData {
         public String javaPath = "";
@@ -324,6 +326,19 @@ public class SettingsView extends JPanel {
             gpuBox.setEnabled(false);
             gpuBox.setToolTipText("No se detecto GPU dedicada");
         }
+        gpuBox.addActionListener(e -> {
+            if (gpuBox.isSelected()) {
+                com.ragsmc.launcher.hardware.GpuDedicatedHelper.enableForAllKnownJava();
+                if (window != null) {
+                    window.getConsoleView().appendLine("Forzar GPU dedicada: ACTIVADO para todos los Java detectados");
+                }
+            } else {
+                com.ragsmc.launcher.hardware.GpuDedicatedHelper.disableForAllKnownJava();
+                if (window != null) {
+                    window.getConsoleView().appendLine("Forzar GPU dedicada: DESACTIVADO");
+                }
+            }
+        });
         form.add(gpuBox);
         mesaBox = new JCheckBox("Forzar CPU - render por software (Mesa, GPUs muy viejas)");
         styleCheck(mesaBox);
@@ -658,5 +673,9 @@ public class SettingsView extends JPanel {
         javaListModel = null;
         javaList = null;
         javaPaths.clear();
+    }
+
+    public void setWindow(com.ragsmc.launcher.ui.MainWindow window) {
+        this.window = window;
     }
 }
