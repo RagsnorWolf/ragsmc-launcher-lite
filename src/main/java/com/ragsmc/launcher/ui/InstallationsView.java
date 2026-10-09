@@ -148,17 +148,8 @@ public class InstallationsView extends JPanel {
         descScroll.setMaximumSize(new Dimension(440, 56));
         form.add(descScroll);
         form.add(Box.createRigidArea(new Dimension(0, 8)));
-        // Filtrar solo versiones permitidas
-        List<String> allowed = new ArrayList<>();
-        for (String v : knownVersions) {
-            if (com.ragsmc.launcher.minecraft.AllowedVersions.isAllowed(v)) {
-                allowed.add(v);
-            }
-        }
-        if (allowed.isEmpty()) {
-            allowed.addAll(com.ragsmc.launcher.minecraft.AllowedVersions.ALLOWED);
-        }
-        String[] versions = allowed.toArray(new String[0]);
+        // Dropdown fijo con las 13 versiones soportadas, de mas nueva a mas vieja (snapshot al final)
+        String[] versions = com.ragsmc.launcher.minecraft.AllowedVersions.ORDERED.toArray(new String[0]);
         JComboBox<String> versionCombo = new JComboBox<>(versions);
         styleCombo(versionCombo);
         form.add(comboRow("Version:", versionCombo));
