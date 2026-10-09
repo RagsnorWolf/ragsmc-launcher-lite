@@ -1348,7 +1348,11 @@ public class Launcher {
                 if (d.mesaCpu && !oldMesa && isWindowsOs()) {
                     // Will be applied on next launch
                 } else if (!d.mesaCpu && oldMesa) {
-                    MesaDownloader.removeFromAllJava();
+                    try {
+                        MesaDownloader.uninstall();
+                    } catch (Exception ex) {
+                        MesaDownloader.removeFromAllJava();
+                    }
                 }
                 window.getConsoleView().appendLine("Ajustes guardados: RAM " + d.ramMb + " MB, Java " + (d.javaPath.isEmpty() ? "auto" : d.javaPath));
             } catch (Exception ex) {

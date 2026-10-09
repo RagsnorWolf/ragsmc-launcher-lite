@@ -409,10 +409,17 @@ public class SettingsView extends JPanel {
                     mesaBox.setSelected(false);
                 }
             } else {
-                // Remover Mesa de todos los Java
-                com.ragsmc.launcher.hardware.MesaDownloader.removeFromAllJava();
-                if (window != null) {
-                    window.getConsoleView().appendLine("Mesa: DLLs removidas de todos los Java detectados");
+                // Desinstalar Mesa: borra DLLs de cada Java + carpeta mesa3d
+                try {
+                    com.ragsmc.launcher.hardware.MesaDownloader.uninstall();
+                    if (window != null) {
+                        window.getConsoleView().appendLine("Mesa: desinstalado. Minecraft vuelve a OpenGL normal.");
+                    }
+                } catch (Exception ex) {
+                    if (window != null) {
+                        window.getConsoleView().appendLine("Mesa: error al desinstalar: " + ex.getMessage());
+                    }
+                    com.ragsmc.launcher.hardware.MesaDownloader.removeFromAllJava();
                 }
             }
         });
