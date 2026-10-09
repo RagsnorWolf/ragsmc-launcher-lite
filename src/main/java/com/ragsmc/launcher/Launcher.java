@@ -42,6 +42,7 @@ import javax.swing.SwingWorker;
 
 public class Launcher {
     private static final AtomicBoolean isLaunching = new AtomicBoolean(false);
+    private long tLaunchStart = 0;
 
     private final MainWindow window;
     private final SettingsPersistence settingsPersistence;
@@ -409,6 +410,9 @@ public class Launcher {
     }
 
     private void launchSelected() {
+        tLaunchStart = System.nanoTime();
+        com.ragsmc.launcher.util.Logger.info("[TIMING] launchSelected START");
+        
         // Prevent double launch
         if (!isLaunching.compareAndSet(false, true)) {
             com.ragsmc.launcher.util.Logger.info("[Launch] Ya hay un lanzamiento en curso, ignorando click");
@@ -470,6 +474,8 @@ public class Launcher {
 
     private void launchExistingInstance(InstanceStore.Instance in, String username, String javaPath, String serverIp, int serverPort) {
         final long t0 = System.nanoTime();
+        final long tLaunchSelected = System.nanoTime();
+        com.ragsmc.launcher.util.Logger.info("[TIMING] launchSelected took " + ((tLaunchSelected - tLaunchStart) / 1_000_000) + "ms");
         com.ragsmc.launcher.util.Logger.info("JUGAR instancia=" + in.name + " version=" + in.version + " ram=" + in.ramMb + " java=" + javaPath);
         window.getPlayView().setLaunching(true);
         window.getPlayView().setStatus("Preparando " + in.name + "...");
@@ -566,6 +572,8 @@ public class Launcher {
     }
 
     private void buildAndLaunch(InstanceStore.Instance in, String username, String javaPath, long t0, String serverIp, int serverPort) {
+        final long tBuildStart = System.nanoTime();
+        com.ragsmc.launcher.util.Logger.info("[TIMING] buildAndLaunch START");
         final LaunchConfig cfg = new LaunchConfig();
         cfg.setUsername(username);
         cfg.setUuid(OfflineUuid.generate(username));
@@ -624,6 +632,8 @@ public class Launcher {
         console.appendLine("Lanzando " + in.name + " (" + ver + ") como " + user);
         console.appendLine("Instancia: " + in.gameDir);
         com.ragsmc.launcher.util.Logger.info("T cfg lista en " + ((System.nanoTime() - t0) / 1000000) + "ms desde click");
+        com.ragsmc.launcher.util.Logger.info("[TIMING] buildAndLaunch took " + ((System.nanoTime() - tBuildStart) / 1_000_000) + "ms");
+        com.ragsmc.launcher.util.Logger.info("[TIMING] Total launch time: " + ((System.nanoTime() - t0) / 1_000_000) + "ms");
         LauncherLifecycle.launchAndManage(window,
                 () -> {
                     try {
