@@ -1,11 +1,68 @@
+# ============ BUILD ============
 target/
 *.jar
-*.pfx
+*.class
+dependency-reduced-pom.xml
+
+# ============ IDE ============
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# ============ OS ============
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============ LOGS ============
 *.log
+logs/
+ragmsc_debug.log
+
+# ============ SECRETOS ============
+*.pfx
+*.pem
+*.key
+.env
+.env.*
+*credentials*
+*secrets*
+
+# ============ JRE CUSTOM ============
+custom-jre/
+runtimes/
+
+# ============ NATIVES (se extraen) ============
+natives/
+
+# ============ SCRIPTS OPENCODE (basura) ============
+patch_*.py
+inspect*.py
+fix_*.py
+__pycache__/
+*.pyc
+
+# ============ MESA (nunca commitear) ============
 opengl32.dll
 libgallium_wgl.dll
 libglapi.dll
-custom-jre/
-.idea/
-.vscode/
-*.class
+mesa3d*.7z
+mesa3d*.zip
+
+# ============ INFORMES (van en carpeta externa) ============
+*_REPORT.md
+*AUDIT*.md
+*OPTIMIZATION*.md
+*QUALITY*.md
+*FINAL_REPORT*.md
+*TIMING*.md
+*METRICAS*.md
+NOTAS.md
+BUILD.md
+
+# ============ BACKUPS ============
+*.bak
+*.tmp
+*.old
