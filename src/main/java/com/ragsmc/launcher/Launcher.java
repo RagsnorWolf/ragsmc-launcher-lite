@@ -1222,8 +1222,24 @@ public class Launcher {
             launchSelected();
         });
         window.getHomeView().setOnShowInstallations(() -> window.showView("installations"));
-    }
+        window.getHomeView().setOnNativePreExtract(new Runnable() {
+            @Override
+            public void run() {
+                InstanceStore.Instance in = window.getPlayView().getSelectedInstance();
+                if (in != null && in.version != null) {
+                    new Thread(() -> {
+                        try {
+                            versions.ensureNatives(in.version, AppDirs.gameDir(), null);
+                            com.ragsmc.launcher.util.Logger.info("[PRE-EXTRACT] Natives ready for " + in.version);
+                        } catch (Exception e) {
+                            com.ragsmc.launcher.util.Logger.info("[PRE-EXTRACT] Error: " + e.getMessage());
+                        }
+                    }).start();
+                }
+            }
+        });
 
+    }
     private void wireMods() {
         // FASE 3: la busqueda de mods vive en Recursos > Explorar.
     }

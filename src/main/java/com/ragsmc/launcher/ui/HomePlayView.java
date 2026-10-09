@@ -53,6 +53,7 @@ public class HomePlayView extends JPanel {
     private Runnable onShowInstallations;
     private Runnable onInstanceChanged;
     private Runnable onRamChanged;
+    private Runnable onNativePreExtract;
     private Runnable onCreateFirst;
     private Runnable onPlay;
     private boolean syncing = false;
@@ -236,6 +237,9 @@ public class HomePlayView extends JPanel {
         if (onInstanceChanged != null) {
             onInstanceChanged.run();
         }
+        if (onNativePreExtract != null) {
+            onNativePreExtract.run();
+        }
     }
 
     private void onRamPicked() {
@@ -394,6 +398,10 @@ public class HomePlayView extends JPanel {
 
     public void setOnRamChanged(Runnable r) {
         this.onRamChanged = r;
+    }
+
+    public void setOnNativePreExtract(Runnable r) {
+        this.onNativePreExtract = r;
     }
 
     public void setOnCreateFirst(Runnable r) {
