@@ -1066,7 +1066,33 @@ public class Launcher {
                 new File(dir, "saves").mkdirs();
                 InstanceStore.Instance created = instances.create(ni.name, ni.version, ni.loader, ni.ramMb > 0 ? ni.ramMb : 4096, dir);
                 created.description = ni.description != null ? ni.description : "";
-                created.iconPath = ni.iconPath != null ? ni.iconPath : "";
+                
+                // Copiar icono a la carpeta de la instancia si se seleccionó uno
+                String iconPath = ni.iconPath != null ? ni.iconPath : "";
+                if (!iconPath.isEmpty()) {
+                    File srcIcon = new File(iconPath);
+                    if (srcIcon.exists()) {
+                        File destDir = dir;
+                        destDir.mkdirs();
+                        File destIcon = new File(destDir, "icon.png");
+                        try {
+                            // Redimensionar a 128x128 para no llenar el disco
+                            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(srcIcon);
+                            if (img != null) {
+                                java.awt.Image scaled = img.getScaledInstance(128, 128, java.awt.Image.SCALE_SMOOTH);
+                                java.awt.image.BufferedImage scaledImg = new java.awt.image.BufferedImage(128, 128, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                                java.awt.Graphics2D g2d = scaledImg.createGraphics();
+                                g2d.drawImage(scaled, 0, 0, null);
+                                g2d.dispose();
+                                javax.imageio.ImageIO.write(scaledImg, "png", destIcon);
+                                iconPath = "instances/" + created.id + "/icon.png";
+                            }
+                        } catch (Exception e) {
+                            com.ragsmc.launcher.util.Logger.info("[ICON] Error copiando icono: " + e.getMessage());
+                        }
+                    }
+                }
+                created.iconPath = iconPath;
                 try {
                     instances.update(created);
                 } catch (Exception ignored) {

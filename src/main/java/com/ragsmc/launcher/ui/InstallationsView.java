@@ -3,6 +3,9 @@ package com.ragsmc.launcher.ui;
 import com.ragsmc.launcher.minecraft.InstanceStore;
 import com.ragsmc.launcher.ui.theme.Colors;
 import java.awt.BorderLayout;
+import java.awt.Image;
+import java.io.File;
+import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -306,6 +309,28 @@ public class InstallationsView extends JPanel {
                 BorderFactory.createEmptyBorder(12, 14, 12, 14)));
         card.setMaximumSize(new Dimension(900, 76));
         card.setAlignmentX(LEFT_ALIGNMENT);
+        
+        // Icono de la instancia
+        JLabel iconLabel = new JLabel();
+        iconLabel.setPreferredSize(new Dimension(48, 48));
+        iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        iconLabel.setVerticalAlignment(SwingConstants.CENTER);
+        iconLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 10));
+        if (in.iconPath != null && !in.iconPath.isEmpty()) {
+            File iconFile = new File(com.ragsmc.launcher.util.AppDirs.dataDir(), in.iconPath);
+            if (iconFile.exists()) {
+                try {
+                    java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(iconFile);
+                    if (img != null) {
+                        java.awt.Image scaled = img.getScaledInstance(48, 48, java.awt.Image.SCALE_SMOOTH);
+                        iconLabel.setIcon(new javax.swing.ImageIcon(scaled));
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        card.add(iconLabel, BorderLayout.WEST);
+        
         JPanel text = new JPanel();
         text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
         text.setBackground(Colors.CARD_BG);
