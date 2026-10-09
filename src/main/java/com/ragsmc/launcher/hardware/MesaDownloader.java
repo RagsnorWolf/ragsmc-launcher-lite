@@ -18,11 +18,17 @@ import java.util.zip.ZipInputStream;
 
 public final class MesaDownloader {
 
-    // TODO(fase-7): Configurar URL y SHA-256 del release de Mesa3D
-    // Subir mesa3d-opengl32-x64.zip (con opengl32.dll, libgallium_wgl.dll, libglapi.dll) a un release de GitHub
-    // y poner aqui la URL y el hash SHA-256
+    // PENDIENTE-USUARIO: empaquetar mesa3d-opengl32-x64.zip (opengl32.dll, libgallium_wgl.dll, libglapi.dll
+    // del directorio x64/ del release-msvc de https://github.com/pal1000/mesa-dist-win/releases),
+    // subirlo a un release de GitHub del proyecto RagsMC y pegar aqui la URL y el SHA-256 (Get-FileHash).
+    // Mientras esten vacios, el toggle "Forzar CPU (Mesa)" usa el flujo manual (ver SettingsView).
     private static final String MESA_URL = "";
     private static final String MESA_SHA256 = "";
+    public static final String[] REQUIRED_DLLS = {
+        "opengl32.dll",
+        "libgallium_wgl.dll",
+        "libglapi.dll"
+    };
 
     private static final File MESA_DIR = new File(
         System.getenv("APPDATA") != null ? System.getenv("APPDATA") : System.getProperty("user.home"),
@@ -33,59 +39,123 @@ public final class MesaDownloader {
     }
 
     public static File download(ProgressCallback callback) throws IOException, InterruptedException {
-        if (MESA_URL.isEmpty() || MESA_SHA256.isEmpty()) {
+        if (!isMesaConfigured()) {
             throw new IllegalStateException("Mesa no configurado: MESA_URL y MESA_SHA256 deben estar definidos en MesaDownloader.java");
         }
 
+        // 1. Si ya esta descargado, no descargar de nuevo
+        if (isMesaAvailable()) {
+            System.out.println("[Mesa] Ya instalado en " + MESA_DIR.getAbsolutePath());
+            if (callback != null) {
+                callback.onProgress("Mesa ya instalado", 1.0);
+            }
+            return MESA_DIR;
+        }
+
+        System.out.println("[Mesa] Iniciando descarga desde " + MESA_URL);
         File zipFile = new File(MESA_DIR, "mesa3d-opengl32-x64.zip");
         MESA_DIR.mkdirs();
 
-        // Descargar con progreso
+        // 2. Descargar ZIP con progreso
         downloadWithProgress(MESA_URL, zipFile, callback);
 
-        // Verificar SHA-256
+        // 3. Verificar SHA-256
+        System.out.println("[Mesa] Descarga completa. Verificando SHA-256...");
         String actualSha = calculateSha256(zipFile);
         if (!actualSha.equalsIgnoreCase(MESA_SHA256)) {
             Files.deleteIfExists(zipFile.toPath());
-            throw new IOException("SHA-256 de Mesa no coincide. Esperado: " + MESA_SHA256 + ", actual: " + actualSha);
+            throw new IOException("SHA-256 no coincide. Archivo corrupto o URL incorrecta.");
         }
+        System.out.println("[Mesa] SHA-256 OK");
 
-        // Extraer 3 DLLs
-        List<String> requiredDlls = List.of("opengl32.dll", "libgallium_wgl.dll", "libglapi.dll");
-        extractDlls(zipFile, requiredDlls);
+        // 4. Extraer las 3 DLLs
+        System.out.println("[Mesa] Extrayendo 3 DLLs...");
+        extractDlls(zipFile, java.util.Arrays.asList(REQUIRED_DLLS));
+
+        // 5. Borrar ZIP
+        Files.deleteIfExists(zipFile.toPath());
 
         if (callback != null) {
             callback.onProgress("Mesa descargado y verificado", 1.0);
         }
+        System.out.println("[Mesa] Mesa activado correctamente en " + MESA_DIR.getAbsolutePath());
         return MESA_DIR;
     }
 
     private static void downloadWithProgress(String url, File dest, ProgressCallback callback) throws IOException, InterruptedException {
         java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .connectTimeout(java.time.Duration.ofSeconds(30))
                 .build();
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                 .uri(java.net.URI.create(url))
-                .timeout(java.time.Duration.ofMinutes(5))
-                .header("User-Agent", "RagsMC-Launcher/1.0")
+                .timeout(java.time.Duration.ofMinutes(10))
+                .header("User-Agent", "RagsMC-Launcher/2.0")
                 .GET()
                 .build();
 
         java.net.http.HttpResponse<InputStream> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofInputStream());
+        int hops = 0;
+        while ((response.statusCode() == 301 || response.statusCode() == 302 || response.statusCode() == 303
+                || response.statusCode() == 307 || response.statusCode() == 308) && hops < 5) {
+            String location = response.headers().firstValue("Location").orElse(null);
+            if (location == null || location.isEmpty()) {
+                break;
+            }
+            try {
+                response.body().close();
+            } catch (Exception ignored) {
+            }
+            java.net.URI nextUri = java.net.URI.create(url).resolve(location);
+            java.net.http.HttpRequest nextReq = java.net.http.HttpRequest.newBuilder()
+                    .uri(nextUri)
+                    .timeout(java.time.Duration.ofMinutes(10))
+                    .header("User-Agent", "RagsMC-Launcher/2.0")
+                    .GET()
+                    .build();
+            response = client.send(nextReq, java.net.http.HttpResponse.BodyHandlers.ofInputStream());
+            hops++;
+        }
         if (response.statusCode() != 200) {
-            throw new IOException("HTTP " + response.statusCode() + " descargando Mesa");
+            try {
+                response.body().close();
+            } catch (Exception ignored) {
+            }
+            throw new IOException("HTTP " + response.statusCode() + " descargando Mesa. Revisa tu conexion a internet.");
         }
 
-        long total = response.headers().firstValue("Content-Length").map(Long::parseLong).orElse(-1L);
+        long total = -1L;
+        try {
+            total = response.headers().firstValueAsLong("Content-Length").orElse(-1L);
+        } catch (Exception ignored) {
+        }
         long downloaded = 0;
-        byte[] buffer = new byte[8192];
+        long startNanos = System.nanoTime();
+        byte[] buffer = new byte[32768];
         try (InputStream in = response.body(); FileOutputStream out = new FileOutputStream(dest)) {
             int read;
             while ((read = in.read(buffer)) != -1) {
                 out.write(buffer, 0, read);
                 downloaded += read;
-                if (callback != null && total > 0) {
-                    callback.onProgress("Descargando Mesa... " + (downloaded * 100 / total) + "%", (double) downloaded / total);
+                if (callback != null) {
+                    double frac = total > 0 ? (double) downloaded / total : -1.0;
+                    double elapsedSec = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+                    double speedMBs = elapsedSec > 0 ? (downloaded / 1048576.0) / elapsedSec : 0.0;
+                    String eta = "";
+                    if (total > 0 && speedMBs > 0.01) {
+                        long etaSec = (long) ((total - downloaded) / 1048576.0 / speedMBs);
+                        eta = ", quedan " + etaSec + "s";
+                    }
+                    double mbDone = downloaded / 1048576.0;
+                    if (total > 0) {
+                        long pct = downloaded * 100 / total;
+                        callback.onProgress("Descargando Mesa3D... " + pct + "% (" + String.format("%.1f", speedMBs) + " MB/s" + eta + ")", frac);
+                        if (pct % 25 == 0) {
+                            System.out.println("[Mesa] Progreso: " + pct + "% (" + String.format("%.1f", speedMBs) + " MB/s" + eta + ")");
+                        }
+                    } else {
+                        callback.onProgress("Descargando Mesa3D... " + String.format("%.1f", mbDone) + " MB (" + String.format("%.1f", speedMBs) + " MB/s)", -1.0);
+                    }
                 }
             }
         }
@@ -114,18 +184,73 @@ public final class MesaDownloader {
     }
 
     private static void extractDlls(File zipFile, List<String> requiredDlls) throws IOException {
+        java.util.Set<String> extracted = new java.util.HashSet<>();
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile.toPath()))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                String name = entry.getName();
-                String baseName = new File(name).getName().toLowerCase();
-                if (requiredDlls.contains(baseName)) {
-                    File outFile = new File(MESA_DIR, baseName);
-                    Files.copy(zis, outFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                try {
+                    if (entry.isDirectory()) {
+                        continue;
+                    }
+                    String name = entry.getName();
+                    String baseName = new File(name).getName().toLowerCase();
+                    if (requiredDlls.contains(baseName)) {
+                        File outFile = new File(MESA_DIR, baseName);
+                        Files.copy(zis, outFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        extracted.add(baseName);
+                        System.out.println("[Mesa] Extraido: " + baseName);
+                    }
+                } finally {
+                    zis.closeEntry();
                 }
-                zis.closeEntry();
             }
         }
+        for (String dll : requiredDlls) {
+            if (!extracted.contains(dll) && !new File(MESA_DIR, dll).exists()) {
+                throw new IOException("Falta " + dll + " en el ZIP de Mesa");
+            }
+        }
+    }
+
+    /** Copia las 3 DLLs a un directorio de Java. Devuelve cuantas copio. */
+    public static int copyDllsTo(File javaDir, File mesaDir) {
+        int copied = 0;
+        if (javaDir == null || mesaDir == null) {
+            return 0;
+        }
+        for (String dll : REQUIRED_DLLS) {
+            File src = new File(mesaDir, dll);
+            if (!src.exists()) {
+                System.err.println("[Mesa] Falta en " + mesaDir.getAbsolutePath() + ": " + dll);
+                continue;
+            }
+            try {
+                Files.copy(src.toPath(), new File(javaDir, dll).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                copied++;
+            } catch (IOException e) {
+                System.err.println("[Mesa] Error copiando " + dll + ": " + e.getMessage());
+            }
+        }
+        return copied;
+    }
+
+    /** Desinstala Mesa: borra DLLs de cada Java y la carpeta mesa3d. */
+    public static void uninstall() throws IOException {
+        System.out.println("[Mesa] Desinstalando...");
+        removeFromAllJava();
+        try {
+            if (MESA_DIR.exists()) {
+                java.util.Comparator<java.nio.file.Path> rev = java.util.Comparator.reverseOrder();
+                try (java.util.stream.Stream<java.nio.file.Path> walk = Files.walk(MESA_DIR.toPath())) {
+                    for (java.nio.file.Path p : (Iterable<java.nio.file.Path>) walk.sorted(rev)::iterator) {
+                        Files.deleteIfExists(p);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new IOException("No se pudo borrar " + MESA_DIR.getAbsolutePath() + ": " + e.getMessage());
+        }
+        System.out.println("[Mesa] Desinstalado correctamente");
     }
 
     public static boolean applyToJava(String javaExePath) {
@@ -199,7 +324,13 @@ public final class MesaDownloader {
     }
 
     public static boolean isConfigured() {
-        return !MESA_URL.isEmpty() && !MESA_SHA256.isEmpty();
+        return isMesaConfigured();
+    }
+
+    public static boolean isMesaConfigured() {
+        return MESA_URL != null && !MESA_URL.isEmpty()
+                && MESA_SHA256 != null && !MESA_SHA256.isEmpty()
+                && !MESA_URL.contains("<") && !MESA_SHA256.contains("<");
     }
 
     public static File getMesaDir() {
