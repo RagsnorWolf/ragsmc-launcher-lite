@@ -107,6 +107,9 @@ public class InstanceStore {
     }
 
     public synchronized Instance create(String name, String version, String loader, int ramMb, File gameDir) throws IOException {
+        if (!AllowedVersions.isAllowed(version)) {
+            throw new IllegalArgumentException(AllowedVersions.getMessage());
+        }
         Instance in = new Instance();
         in.id = UUID.randomUUID().toString();
         in.name = name;
