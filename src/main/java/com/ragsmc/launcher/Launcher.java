@@ -41,6 +41,7 @@ import javax.swing.JProgressBar;
 import javax.swing.SwingWorker;
 
 public class Launcher {
+    private static final AtomicBoolean isLaunching = new AtomicBoolean(false);
 
     private final MainWindow window;
     private final SettingsPersistence settingsPersistence;
@@ -408,14 +409,28 @@ public class Launcher {
     }
 
     private void launchSelected() {
+        // Prevent double launch
+        if (!isLaunching.compareAndSet(false, true)) {
+            com.ragsmc.launcher.util.Logger.info("[Launch] Ya hay un lanzamiento en curso, ignorando click");
+            return;
+        }
+        com.ragsmc.launcher.util.Logger.info("[Launch] Intentando lanzar Minecraft");
+        
+        // Disable play button immediately
+        window.getPlayView().setLaunching(true);
+        
         InstanceStore.Instance in = window.getPlayView().getSelectedInstance();
         if (in == null) {
+            isLaunching.set(false);
+            window.getPlayView().setLaunching(false);
             showError("Sin instancias", "Crea tu primera instancia en Instalaciones.");
             window.showView("installations");
             return;
         }
         String username = currentUsername();
         if (username.isEmpty()) {
+            isLaunching.set(false);
+            window.getPlayView().setLaunching(false);
             showError("Falta el perfil", "Crea una cuenta en PERFIL o escribe un nombre de usuario.");
             window.showView("profiles");
             return;
@@ -446,6 +461,8 @@ public class Launcher {
         }
         String javaPath = resolveJava(in.version);
         if (javaPath == null) {
+            isLaunching.set(false);
+            window.getPlayView().setLaunching(false);
             return;
         }
         launchExistingInstance(in, username, javaPath, null, 25565);
