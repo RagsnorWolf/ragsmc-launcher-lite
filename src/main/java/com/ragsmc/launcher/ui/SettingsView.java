@@ -354,11 +354,19 @@ public class SettingsView extends JPanel {
         form.add(gpuBox);
         mesaBox = new JCheckBox("Forzar CPU - render por software (Mesa, GPUs muy viejas)");
         styleCheck(mesaBox);
-        // Habilitado con fallback manual ya que MESA_URL no esta configurado
-        if (!com.ragsmc.launcher.hardware.MesaDownloader.isConfigured()) {
-            mesaBox.setToolTipText("Mesa no configurado automaticamente. Al activar, se te guiara para descargar manualmente.");
+        // Fallback: si no hay URL+SHA configurados, el toggle queda deshabilitado
+        if (!com.ragsmc.launcher.hardware.MesaDownloader.isMesaConfigured()) {
+            mesaBox.setEnabled(false);
+            mesaBox.setToolTipText("Mesa no configurado. Requiere URL + SHA-256.");
         }
         mesaBox.addActionListener(e -> {
+            if (mesaBox.isSelected() && !com.ragsmc.launcher.hardware.MesaDownloader.isMesaConfigured()) {
+                JOptionPane.showMessageDialog(this,
+                    "Mesa no esta configurado. Se requiere la URL del ZIP y su SHA-256 en MesaDownloader.",
+                    "Mesa no configurado", JOptionPane.WARNING_MESSAGE);
+                mesaBox.setSelected(false);
+                return;
+            }
             if (mesaBox.isSelected()) {
                 int r = JOptionPane.showConfirmDialog(this,
                     "Modo Mesa: Minecraft correra por software (CPU). Es MUY lento pero funciona en GPUs que no soportan OpenGL 3.2.\n\n" +
