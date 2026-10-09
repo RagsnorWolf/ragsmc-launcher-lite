@@ -127,6 +127,29 @@ public class MinecraftLauncher {
 
         // Apply GPU/Mesa settings
         if (config.isMesaCpu()) {
+            info(log, "[Launch] Modo Mesa activado");
+            // Verificar que las 3 DLLs esten junto al Java usado; si falta alguna, re-copiar
+            try {
+                File javaExe = new File(config.getJavaPath());
+                File javaDir = javaExe.getParentFile();
+                File mesaDir = com.ragsmc.launcher.hardware.MesaDownloader.getMesaDir();
+                if (javaDir != null) {
+                    boolean faltaAlguna = false;
+                    for (String dll : com.ragsmc.launcher.hardware.MesaDownloader.REQUIRED_DLLS) {
+                        if (!new File(javaDir, dll).exists()) {
+                            faltaAlguna = true;
+                            break;
+                        }
+                    }
+                    if (faltaAlguna) {
+                        info(log, "[Launch] Re-copiando DLLs de Mesa junto a " + javaDir.getAbsolutePath());
+                        int n = com.ragsmc.launcher.hardware.MesaDownloader.copyDllsTo(javaDir, mesaDir);
+                        info(log, "[Launch] DLLs de Mesa copiadas: " + n + "/3");
+                    }
+                }
+            } catch (Exception e) {
+                info(log, "[Launch] Aviso Mesa: " + e.getMessage());
+            }
             // Apply Mesa environment variables
             pb.environment().put("GALLIUM_DRIVER", "llvmpipe");
             pb.environment().put("LIBGL_ALWAYS_SOFTWARE", "1");
