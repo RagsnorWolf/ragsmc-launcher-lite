@@ -141,6 +141,51 @@ public final class JavaVersionSelector {
     }
 
     public static Optional<String> findMojangJava(int major) {
+        // Use exact paths for better reliability
+        return findMojangJavaExact(major);
+    }
+
+    public static Optional<String> findMojangJavaExact(int major) {
+        try {
+            String appdata = System.getenv("APPDATA");
+            File base = appdata != null && !appdata.isEmpty()
+                    ? new File(appdata, ".minecraft" + File.separator + "runtime")
+                    : new File(System.getProperty("user.home"), ".minecraft" + File.separator + "runtime");
+            if (!base.isDirectory()) {
+                return Optional.empty();
+            }
+            // Rutas exactas de runtimes de Mojang
+            String[][] exactPaths = {
+                {"jre-legacy", "windows-x64", "jre-legacy", "bin", "javaw.exe"},
+                {"java-runtime-alpha", "windows-x64", "java-runtime-alpha", "bin", "javaw.exe"},
+                {"java-runtime-beta", "windows-x64", "java-runtime-beta", "bin", "javaw.exe"},
+                {"java-runtime-gamma", "windows-x64", "java-runtime-gamma", "bin", "javaw.exe"},
+                {"java-runtime-delta", "windows-x64", "java-runtime-delta", "bin", "javaw.exe"}
+            };
+            for (String[] parts : exactPaths) {
+                File bin = base;
+                for (String p : parts) {
+                    bin = new File(bin, p);
+                }
+                if (bin.isFile()) {
+                    try {
+                        int detectedMajor = readMojangRuntimeMajor(bin);
+                        if (detectedMajor > 0 && detectedMajor == major) {
+                            System.out.println("[JavaSelector] Encontrado en ruta exacta: " + bin.getAbsolutePath() + " (Java " + detectedMajor + ")");
+                            return Optional.of(bin.getAbsolutePath());
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // Fallback: escaneo recursivo
+        System.out.println("[JavaSelector] Rutas exactas no funcionaron, probando escaneo recursivo...");
+        return findMojangJavaRecursive(major);
+    }
+
+    public static Optional<String> findMojangJavaRecursive(int major) {
         try {
             String appdata = System.getenv("APPDATA");
             File base = appdata != null && !appdata.isEmpty()
@@ -154,6 +199,7 @@ public final class JavaVersionSelector {
             for (File bin : bins) {
                 try {
                     if (probeMajor(bin.getAbsolutePath()) == major) {
+                        System.out.println("[JavaSelector] Encontrado en escaneo recursivo: " + bin.getAbsolutePath() + " (Java " + major + ")");
                         return Optional.of(bin.getAbsolutePath());
                     }
                 } catch (Exception ignored) {
