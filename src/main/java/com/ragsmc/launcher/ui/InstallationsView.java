@@ -47,7 +47,6 @@ public class InstallationsView extends JPanel {
         public String loader = "vanilla";
         public int ramMb = 4096;
         public String iconPath = "";
-        public String bgPath = "";
     }
 
     public InstallationsView(JFrame owner) {
@@ -105,22 +104,6 @@ public class InstallationsView extends JPanel {
         iconPreview.setBorder(BorderFactory.createLineBorder(Colors.BACKGROUND_HOVER, 1));
         iconPreview.setForeground(Colors.TEXT_SECONDARY);
         final String[] iconPath = {""};
-        JButton bgBtn = new JButton("Poner fondo");
-        styleGhost(bgBtn);
-        final String[] bgPath = {""};
-        final JLabel bgLabel = new JLabel("Sin fondo");
-        bgLabel.setForeground(Colors.TEXT_SECONDARY);
-        bgLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-        bgBtn.addActionListener(e -> {
-            JFileChooser fc2 = new JFileChooser();
-            fc2.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Imagen", "png", "jpg", "jpeg"));
-            if (fc2.showOpenDialog(dlg) == JFileChooser.APPROVE_OPTION) {
-                bgPath[0] = fc2.getSelectedFile().getAbsolutePath();
-                bgLabel.setText(fc2.getSelectedFile().getName());
-            }
-        });
-        mediaRow.add(bgBtn);
-        mediaRow.add(bgLabel);
         JButton iconBtn = new JButton("Poner icono");
         styleGhost(iconBtn);
         iconBtn.addActionListener(e -> {
@@ -224,7 +207,6 @@ public class InstallationsView extends JPanel {
                 ni.loader = (String) loaderCombo.getSelectedItem();
                 ni.ramMb = ramSlider.getValue();
                 ni.iconPath = iconPath[0];
-                ni.bgPath = bgPath[0];
                 onCreate.accept(ni);
             }
             dlg.dispose();

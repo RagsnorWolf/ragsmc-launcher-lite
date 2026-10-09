@@ -1067,7 +1067,6 @@ public class Launcher {
                 InstanceStore.Instance created = instances.create(ni.name, ni.version, ni.loader, ni.ramMb > 0 ? ni.ramMb : 4096, dir);
                 created.description = ni.description != null ? ni.description : "";
                 created.iconPath = ni.iconPath != null ? ni.iconPath : "";
-                created.bgPath = ni.bgPath != null ? ni.bgPath : "";
                 try {
                     instances.update(created);
                 } catch (Exception ignored) {
