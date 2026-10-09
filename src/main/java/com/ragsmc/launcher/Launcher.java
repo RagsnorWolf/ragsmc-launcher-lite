@@ -873,6 +873,21 @@ public class Launcher {
         filesLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         filesLabel.setAlignmentX(LEFT_ALIGNMENT);
         body.add(filesLabel);
+        JLabel libsLabel = new JLabel("");
+        libsLabel.setForeground(Colors.TEXT_SECONDARY);
+        libsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        libsLabel.setAlignmentX(LEFT_ALIGNMENT);
+        body.add(libsLabel);
+        JLabel assetsLabel = new JLabel("");
+        assetsLabel.setForeground(Colors.TEXT_SECONDARY);
+        assetsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        assetsLabel.setAlignmentX(LEFT_ALIGNMENT);
+        body.add(assetsLabel);
+        JLabel nativesLabel = new JLabel("");
+        nativesLabel.setForeground(Colors.TEXT_SECONDARY);
+        nativesLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        nativesLabel.setAlignmentX(LEFT_ALIGNMENT);
+        body.add(nativesLabel);
         dlg.add(body, BorderLayout.CENTER);
         javax.swing.JButton cancel = new javax.swing.JButton("Cancelar");
         cancel.setBackground(Colors.FIELD_BACKGROUND);
@@ -912,6 +927,15 @@ public class Launcher {
                 filesLabel.setText(stats.filesDone + " / " + stats.filesTotal + " archivos");
             } else if (stats.filesDone > 0) {
                 filesLabel.setText(stats.filesDone + " archivos");
+            }
+            if (stats.libsTotal > 0) {
+                libsLabel.setText("Librerias: " + stats.libsDone + " / " + stats.libsTotal);
+            }
+            if (stats.assetsTotal > 0) {
+                assetsLabel.setText("Assets: " + stats.assetsDone + " / " + stats.assetsTotal);
+            }
+            if (stats.nativesTotal > 0) {
+                nativesLabel.setText("Natives: " + stats.nativesDone + " / " + stats.nativesTotal);
             }
         });
         uiTimer.start();
@@ -961,7 +985,10 @@ public class Launcher {
                         versions.setStats(null);
                         dlg.dispose();
                         scanVersionsAtStartup();
-                        window.getConsoleView().appendLine("Instalado: " + stats.mbText() + " descargados.");
+                        String resumen = "Minecraft " + version + " instalado correctamente. "
+                            + stats.mbText() + " descargados en " + stats.elapsedText() + ". Iniciando Minecraft...";
+                        window.getConsoleView().appendLine(resumen);
+                        com.ragsmc.launcher.util.Logger.info("[Install] " + resumen);
                         if (afterOk != null) {
                             afterOk.run();
                         }
