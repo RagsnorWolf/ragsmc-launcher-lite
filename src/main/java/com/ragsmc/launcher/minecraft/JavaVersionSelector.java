@@ -97,26 +97,31 @@ public final class JavaVersionSelector {
     }
 
     public static int requiredMajor(String mcVersion) {
-        if (mcVersion == null) {
-            return 17;
+        return getRequiredJavaVersion(mcVersion);
+    }
+
+    /** Mapeo explicito version de Minecraft -> Java requerido. Desconocidas -> 21. */
+    public static int getRequiredJavaVersion(String minecraftVersion) {
+        if (minecraftVersion == null || minecraftVersion.isEmpty()) {
+            return 21;
         }
-        String v = mcVersion.trim();
+        String v = minecraftVersion.trim();
         try {
-            // 23w31a -> Java 17 (snapshot de 1.20.2)
-            if (v.equals("23w31a")) {
+            // Snapshots -> Java 17
+            if (v.startsWith("23w") || v.startsWith("24w") || v.startsWith("25w")) {
                 return 17;
             }
-            // 1.21+ / 24w+ / 25w+ -> Java 21
-            if (compare(v, "1.21") >= 0 || v.startsWith("1.22") || v.startsWith("24w") || v.startsWith("25w")) {
+            // Java 21 (1.21.x, 1.22+ y futuras)
+            if (v.startsWith("1.21") || compare(v, "1.22") >= 0) {
                 return 21;
             }
-            // 1.17 - 1.20.x -> Java 17
-            if (compare(v, "1.17") >= 0) {
+            // Java 17
+            if (v.startsWith("1.17") || v.startsWith("1.18") || v.startsWith("1.19") || v.startsWith("1.20")) {
                 return 17;
             }
         } catch (Exception ignored) {
         }
-        // 1.16.5 y anteriores -> Java 8
+        // Java 8 (default para versiones viejas: 1.7.10, 1.8.9, 1.12.2, 1.14.4, 1.16.5)
         return 8;
     }
 
