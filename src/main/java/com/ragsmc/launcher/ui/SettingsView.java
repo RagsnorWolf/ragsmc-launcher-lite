@@ -156,6 +156,12 @@ public class SettingsView extends JPanel {
         return wrapScroll(form);
     }
 
+    private static String mesaErrorText(String detail) {
+        return "No se pudo instalar Mesa3D.\n" + detail + "\n\n"
+            + "Podes intentarlo de nuevo o descargar manualmente desde:\n"
+            + "https://github.com/pal1000/mesa-dist-win/releases";
+    }
+
     private void useSelectedJava() {
         int idx = javaList.getSelectedIndex();
         if (idx < 0) {
@@ -354,26 +360,13 @@ public class SettingsView extends JPanel {
         form.add(gpuBox);
         mesaBox = new JCheckBox("Forzar CPU - render por software (Mesa, GPUs muy viejas)");
         styleCheck(mesaBox);
-        // Fallback: si no hay URL+SHA configurados, el toggle queda deshabilitado
-        if (!com.ragsmc.launcher.hardware.MesaDownloader.isMesaConfigured()) {
-            mesaBox.setEnabled(false);
-            mesaBox.setToolTipText("Mesa no configurado. Requiere URL + SHA-256.");
-        }
+        mesaBox.setEnabled(true);
+        mesaBox.setToolTipText("Renderiza por software (CPU). Solo para GPUs muy viejas.");
         mesaBox.addActionListener(e -> {
-            if (mesaBox.isSelected() && !com.ragsmc.launcher.hardware.MesaDownloader.isMesaConfigured()) {
-                JOptionPane.showMessageDialog(this,
-                    "Mesa no esta configurado. Se requiere la URL del ZIP y su SHA-256 en MesaDownloader.",
-                    "Mesa no configurado", JOptionPane.WARNING_MESSAGE);
-                mesaBox.setSelected(false);
-                return;
-            }
             if (mesaBox.isSelected()) {
                 int r = JOptionPane.showConfirmDialog(this,
                     "Modo Mesa: Minecraft correra por software (CPU). Es MUY lento pero funciona en GPUs que no soportan OpenGL 3.2.\n\n" +
-                    "Necesitas descargar Mesa3D manualmente:\n" +
-                    "1. Descarga mesa3d-opengl32-x64.zip desde https://github.com/pal1000/mesa-dist-win/releases\n" +
-                    "2. Extrae las 3 DLLs (opengl32.dll, libgallium_wgl.dll, libglapi.dll)\n" +
-                    "3. Colocalas en %APPDATA%\\\\RagsMC\\\\mesa3d\\\\n\n" +
+                    "El launcher descargara e instalara Mesa3D automaticamente (~70 MB).\n" +
                     "Deseas continuar?",
                     "Confirmar modo Mesa",
                     JOptionPane.YES_NO_OPTION,
@@ -382,40 +375,103 @@ public class SettingsView extends JPanel {
                     mesaBox.setSelected(false);
                     return;
                 }
-                // Abrir carpeta para que el usuario coloque las DLLs
-                File mesaDir = com.ragsmc.launcher.hardware.MesaDownloader.getMesaDir();
-                mesaDir.mkdirs();
-                try {
-                    java.awt.Desktop.getDesktop().open(mesaDir);
-                } catch (Exception ignored) {}
-                int r2 = JOptionPane.showConfirmDialog(this,
-                    "Se abrio la carpeta " + mesaDir.getAbsolutePath() + ".\n" +
-                    "Por favor coloca las 3 DLLs (opengl32.dll, libgallium_wgl.dll, libglapi.dll) ahi.\n" +
-                    "Luego haz click en OK para copiarlas a cada Java detectado.",
-                    "Mesa - Colocar DLLs",
-                    JOptionPane.OK_CANCEL_OPTION,
-                    JOptionPane.INFORMATION_MESSAGE);
-                if (r2 != JOptionPane.OK_OPTION) {
-                    mesaBox.setSelected(false);
-                    return;
-                }
-                // Copiar DLLs a cada Java detectado
-                java.util.Map<Integer, String> found = com.ragsmc.launcher.minecraft.JavaVersionSelector.scanAll();
-                int copied = 0;
-                for (String path : found.values()) {
-                    if (com.ragsmc.launcher.hardware.MesaDownloader.applyToJava(path)) {
-                        copied++;
+                // Descargar + instalar Mesa en background con progreso y Cancelar
+                final javax.swing.JDialog mesaDlg = new javax.swing.JDialog((java.awt.Frame) javax.swing.SwingUtilities.getWindowAncestor(SettingsView.this), "Instalando Mesa3D", true);
+                mesaDlg.setLayout(new java.awt.BorderLayout(10, 10));
+                mesaDlg.setSize(440, 170);
+                mesaDlg.setLocationRelativeTo(SettingsView.this);
+                final javax.swing.JLabel mesaLabel = new javax.swing.JLabel("Conectando...");
+                final javax.swing.JProgressBar mesaBar = new javax.swing.JProgressBar(0, 100);
+                mesaBar.setStringPainted(true);
+                mesaBar.setIndeterminate(true);
+                final javax.swing.JButton mesaCancel = new javax.swing.JButton("Cancelar");
+                javax.swing.JPanel mesaTop = new javax.swing.JPanel(new java.awt.BorderLayout(5, 5));
+                mesaTop.add(mesaLabel, java.awt.BorderLayout.NORTH);
+                mesaDlg.add(mesaTop, java.awt.BorderLayout.NORTH);
+                mesaDlg.add(mesaBar, java.awt.BorderLayout.CENTER);
+                mesaDlg.add(mesaCancel, java.awt.BorderLayout.SOUTH);
+                final java.util.concurrent.atomic.AtomicBoolean mesaCancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
+                mesaCancel.addActionListener(ev -> {
+                    mesaCancelled.set(true);
+                    mesaCancel.setEnabled(false);
+                    mesaCancel.setText("Cancelando...");
+                });
+                javax.swing.SwingWorker<java.io.File, String> mesaWorker = new javax.swing.SwingWorker<java.io.File, String>() {
+                    @Override
+                    protected java.io.File doInBackground() throws Exception {
+                        final long[] lastUi = {0};
+                        return com.ragsmc.launcher.hardware.MesaDownloader.download((msg, frac) -> {
+                            if (mesaCancelled.get()) {
+                                throw new RuntimeException("cancelado por el usuario");
+                            }
+                            long now = System.nanoTime();
+                            if (now - lastUi[0] > 200000000L || frac >= 1.0) {
+                                lastUi[0] = now;
+                                publish(msg + "|" + frac);
+                            }
+                        });
                     }
-                }
-                if (window != null) {
-                    window.getConsoleView().appendLine("Mesa: DLLs copiadas a " + copied + " JVMs");
-                }
-                if (copied == 0) {
-                    JOptionPane.showMessageDialog(this,
-                        "No se pudo copiar a ningun Java. Verifica que las DLLs estan en la carpeta.",
-                        "Error Mesa", JOptionPane.ERROR_MESSAGE);
-                    mesaBox.setSelected(false);
-                }
+                    @Override
+                    protected void process(java.util.List<String> chunks) {
+                        for (String c : chunks) {
+                            int sep = c.lastIndexOf("|");
+                            if (sep < 0) {
+                                continue;
+                            }
+                            try {
+                                String msg = c.substring(0, sep);
+                                double frac = Double.parseDouble(c.substring(sep + 1));
+                                if (frac >= 0) {
+                                    mesaBar.setIndeterminate(false);
+                                    mesaBar.setValue((int) (frac * 100));
+                                } else {
+                                    mesaBar.setIndeterminate(true);
+                                }
+                                mesaLabel.setText(msg.length() > 64 ? msg.substring(0, 64) + "..." : msg);
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    }
+                    @Override
+                    protected void done() {
+                        mesaDlg.dispose();
+                        try {
+                            java.io.File mesaDir = get();
+                            java.util.Map<Integer, String> found = com.ragsmc.launcher.minecraft.JavaVersionSelector.scanAll();
+                            int copied = 0;
+                            int total = 0;
+                            for (String path : found.values()) {
+                                total++;
+                                java.io.File jd = new java.io.File(path).getParentFile();
+                                if (jd != null && com.ragsmc.launcher.hardware.MesaDownloader.copyDllsTo(jd, mesaDir) > 0) {
+                                    copied++;
+                                }
+                            }
+                            if (window != null) {
+                                window.getConsoleView().appendLine("Mesa: DLLs copiadas a " + copied + "/" + total + " JVMs");
+                            }
+                            JOptionPane.showMessageDialog(SettingsView.this,
+                                "Mesa instalado correctamente. Minecraft correra por software.",
+                                "Mesa activado", JOptionPane.INFORMATION_MESSAGE);
+                        } catch (Exception ex) {
+                            String msg = ex.getMessage() != null ? ex.getMessage() : ex.toString();
+                            java.lang.Throwable cause = ex.getCause();
+                            String all = msg + (cause != null && cause.getMessage() != null ? " " + cause.getMessage() : "");
+                            if (all.contains("cancelado")) {
+                                if (window != null) {
+                                    window.getConsoleView().appendLine("Instalacion de Mesa cancelada.");
+                                }
+                            } else {
+                                JOptionPane.showMessageDialog(SettingsView.this,
+                                    mesaErrorText(all),
+                                    "Error al instalar Mesa", JOptionPane.ERROR_MESSAGE);
+                            }
+                            mesaBox.setSelected(false);
+                        }
+                    }
+                };
+                mesaWorker.execute();
+                mesaDlg.setVisible(true);
             } else {
                 // Desinstalar Mesa: borra DLLs de cada Java + carpeta mesa3d
                 try {
