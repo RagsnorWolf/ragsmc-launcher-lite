@@ -65,7 +65,7 @@ public class HomePlayView extends JPanel {
         BgPanel content = new BgPanel(background);
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(BorderFactory.createEmptyBorder(10, 20, 20, 20));
-        ImageIcon titleIcon = Images.icon("titulo.png", 420, 90);
+        ImageIcon titleIcon = Images.icon("titulo_minecraft.png", 420, 90);
         JLabel title;
         if (titleIcon != null) {
             title = new JLabel(titleIcon, SwingConstants.CENTER);
