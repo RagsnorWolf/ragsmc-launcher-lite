@@ -157,9 +157,20 @@ public class SettingsView extends JPanel {
     }
 
     private static String mesaErrorText(String detail) {
-        return "No se pudo instalar Mesa3D.\n" + detail + "\n\n"
-            + "Podes intentarlo de nuevo o descargar manualmente desde:\n"
-            + "https://github.com/pal1000/mesa-dist-win/releases";
+        String low = detail == null ? "" : detail.toLowerCase();
+        StringBuilder sb = new StringBuilder("No se pudo instalar Mesa3D.\n").append(detail);
+        if (low.contains("unknownhost") || low.contains("connect") || low.contains("timeout")
+                || low.contains("timed out") || low.contains("network") || low.contains("no route to host")) {
+            sb.append("\n\nSin conexion a internet o GitHub no responde.\nRevisa tu conexion e intentalo de nuevo.");
+        } else if (low.contains("sha-256") || low.contains("sha256")) {
+            sb.append("\n\nEl archivo descargado no coincide con el release oficial.\nSe borro el archivo corrupto; intentalo de nuevo.");
+        } else if (low.contains("7-zip") || low.contains("7zip") || low.contains("7zr")) {
+            sb.append("\n\nNo se pudo obtener 7-Zip automaticamente.\nDescargalo manual desde https://www.7-zip.org/download.html");
+        } else {
+            sb.append("\n\nPodes intentarlo de nuevo o descargar manualmente desde:\nhttps://github.com/pal1000/mesa-dist-win/releases");
+        }
+        sb.append("\n\nEl launcher sigue funcionando sin Mesa.");
+        return sb.toString();
     }
 
     private void useSelectedJava() {
@@ -449,6 +460,20 @@ public class SettingsView extends JPanel {
                             }
                             if (window != null) {
                                 window.getConsoleView().appendLine("Mesa: DLLs copiadas a " + copied + "/" + total + " JVMs");
+                            }
+                            if (total == 0) {
+                                JOptionPane.showMessageDialog(SettingsView.this,
+                                    "Mesa descargado, pero no se detecto ningun Java instalado.\nConfigura un Java en Ajustes y volve a activar el modo Mesa.",
+                                    "Sin Java detectado", JOptionPane.WARNING_MESSAGE);
+                                mesaBox.setSelected(false);
+                                return;
+                            }
+                            if (copied == 0) {
+                                JOptionPane.showMessageDialog(SettingsView.this,
+                                    mesaErrorText("No se pudo copiar ninguna DLL a los Java detectados."),
+                                    "Error al instalar Mesa", JOptionPane.ERROR_MESSAGE);
+                                mesaBox.setSelected(false);
+                                return;
                             }
                             JOptionPane.showMessageDialog(SettingsView.this,
                                 "Mesa instalado correctamente. Minecraft correra por software.",
