@@ -18,17 +18,24 @@ import java.util.zip.ZipInputStream;
 
 public final class MesaDownloader {
 
-    // PENDIENTE-USUARIO: empaquetar mesa3d-opengl32-x64.zip (opengl32.dll, libgallium_wgl.dll, libglapi.dll
-    // del directorio x64/ del release-msvc de https://github.com/pal1000/mesa-dist-win/releases),
-    // subirlo a un release de GitHub del proyecto RagsMC y pegar aqui la URL y el SHA-256 (Get-FileHash).
-    // Mientras esten vacios, el toggle "Forzar CPU (Mesa)" usa el flujo manual (ver SettingsView).
+    // Release oficial pal1000/mesa-dist-win (version fija, NO "latest").
+    // Verificado el 2026-10-09: tamano 70257286 bytes, SHA-256 coincide con el digest oficial de GitHub
+    // y el .7z contiene x64/opengl32.dll + x64/libgallium_wgl.dll (extraccion probada con 7-Zip).
+    // NOTA: los releases actuales (~25.x en adelante) YA NO traen libglapi.dll; el driver WGL por
+    // software funciona solo con opengl32.dll + libgallium_wgl.dll.
+    private static final String MESA_7Z_URL =
+        "https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-msvc.7z";
+    private static final String MESA_7Z_SHA256 =
+        "351fc8c8b695878ffb3eaa044b3ead08672a48b1a045e3c3e3975811df0f6695";
+    // URL del ZIP propio (flujo anterior). Si algun dia se sube mesa3d-opengl32-x64.zip a un
+    // release de RagsMC, poner aqui URL y SHA y usar downloadZip().
     private static final String MESA_URL = "";
     private static final String MESA_SHA256 = "";
     public static final String[] REQUIRED_DLLS = {
         "opengl32.dll",
-        "libgallium_wgl.dll",
-        "libglapi.dll"
+        "libgallium_wgl.dll"
     };
+    private static final String SEVENZIP_FALLBACK_URL = "https://www.7-zip.org/a/7zr.exe";
 
     private static final File MESA_DIR = new File(
         System.getenv("APPDATA") != null ? System.getenv("APPDATA") : System.getProperty("user.home"),
@@ -39,6 +46,63 @@ public final class MesaDownloader {
     }
 
     public static File download(ProgressCallback callback) throws IOException, InterruptedException {
+        System.out.println("[Mesa] Iniciando descarga");
+        // 1. Early-return si ya esta instalado
+        if (isMesaAvailable()) {
+            System.out.println("[Mesa] Ya instalado en " + MESA_DIR.getAbsolutePath());
+            if (callback != null) {
+                callback.onProgress("Mesa ya instalado", 1.0);
+            }
+            return MESA_DIR;
+        }
+        // 2. Buscar 7-Zip; si no esta, descargar 7zr.exe portable
+        File sevenZip = find7Zip();
+        if (sevenZip == null) {
+            if (callback != null) {
+                callback.onProgress("Descargando 7-Zip...", 0.02);
+            }
+            System.out.println("[Mesa] 7-Zip no encontrado, descargando 7zr.exe portable...");
+            sevenZip = download7zr(callback);
+        } else {
+            System.out.println("[Mesa] 7-Zip encontrado en " + sevenZip.getAbsolutePath());
+        }
+        MESA_DIR.mkdirs();
+        // 3. Descargar .7z de Mesa
+        System.out.println("[Mesa] Descargando mesa3d-26.2.4-release-msvc.7z");
+        File archive = new File(MESA_DIR, "mesa3d.7z");
+        final ProgressCallback outerCb = callback;
+        downloadWithProgress(MESA_7Z_URL, archive, outerCb == null ? null : (msg, frac) -> {
+            double mapped = frac < 0 ? 0.3 : 0.1 + frac * 0.5;
+            outerCb.onProgress(msg, mapped);
+        });
+        // 4. Verificar SHA-256
+        if (outerCb != null) {
+            outerCb.onProgress("Verificando SHA-256...", 0.62);
+        }
+        System.out.println("[Mesa] Verificando SHA-256...");
+        String actualSha = calculateSha256(archive);
+        if (!actualSha.equalsIgnoreCase(MESA_7Z_SHA256)) {
+            Files.deleteIfExists(archive.toPath());
+            throw new IOException("SHA-256 no coincide. Archivo corrupto o release modificado.");
+        }
+        System.out.println("[Mesa] SHA-256 OK");
+        // 5. Extraer las DLLs
+        if (outerCb != null) {
+            outerCb.onProgress("Extrayendo DLLs...", 0.8);
+        }
+        System.out.println("[Mesa] Extrayendo DLLs...");
+        extractDllsFrom7z(sevenZip, archive, MESA_DIR);
+        // 6. Borrar .7z
+        Files.deleteIfExists(archive.toPath());
+        if (outerCb != null) {
+            outerCb.onProgress("Mesa instalado correctamente", 1.0);
+        }
+        System.out.println("[Mesa] Mesa instalado correctamente en " + MESA_DIR.getAbsolutePath());
+        return MESA_DIR;
+    }
+
+    /** Flujo anterior con ZIP propio (requiere MESA_URL/MESA_SHA256). Se mantiene por compatibilidad. */
+    public static File downloadZip(ProgressCallback callback) throws IOException, InterruptedException {
         if (!isMesaConfigured()) {
             throw new IllegalStateException("Mesa no configurado: MESA_URL y MESA_SHA256 deben estar definidos en MesaDownloader.java");
         }
@@ -80,6 +144,123 @@ public final class MesaDownloader {
         }
         System.out.println("[Mesa] Mesa activado correctamente en " + MESA_DIR.getAbsolutePath());
         return MESA_DIR;
+    }
+
+    public static File find7Zip() {
+        String programFiles = System.getenv("ProgramFiles");
+        String programFilesX86 = System.getenv("ProgramFiles(x86)");
+        String[] paths = {
+            "C:\\Program Files\\7-Zip\\7z.exe",
+            "C:\\Program Files (x86)\\7-Zip\\7z.exe",
+            programFiles != null ? programFiles + "\\7-Zip\\7z.exe" : null,
+            programFilesX86 != null ? programFilesX86 + "\\7-Zip\\7z.exe" : null
+        };
+        for (String path : paths) {
+            if (path == null) {
+                continue;
+            }
+            File f = new File(path);
+            if (f.isFile()) {
+                return f;
+            }
+        }
+        // Copia portable descargada antes por nosotros
+        File portable = new File(MESA_DIR.getParentFile(), "tools" + File.separator + "7zr.exe");
+        if (portable.isFile()) {
+            return portable;
+        }
+        return null;
+    }
+
+    private static File download7zr(ProgressCallback callback) throws IOException, InterruptedException {
+        File toolsDir = new File(MESA_DIR.getParentFile(), "tools");
+        toolsDir.mkdirs();
+        File dest = new File(toolsDir, "7zr.exe");
+        if (dest.isFile() && dest.length() > 100000) {
+            System.out.println("[Mesa] Reusando 7zr.exe descargado antes");
+            return dest;
+        }
+        System.out.println("[Mesa] Descargando 7zr.exe portable desde " + SEVENZIP_FALLBACK_URL);
+        final ProgressCallback outerCb = callback;
+        downloadWithProgress(SEVENZIP_FALLBACK_URL, dest, outerCb == null ? null : (msg, frac) -> {
+            outerCb.onProgress("Descargando 7-Zip portable... " + msg, frac < 0 ? 0.02 : frac * 0.05);
+        });
+        if (!dest.isFile() || dest.length() < 100000) {
+            Files.deleteIfExists(dest.toPath());
+            throw new IOException("No se pudo descargar 7-Zip. Descargalo manual desde https://www.7-zip.org/download.html");
+        }
+        System.out.println("[Mesa] 7zr.exe listo en " + dest.getAbsolutePath());
+        return dest;
+    }
+
+    private static void extractDllsFrom7z(File sevenZip, File archive7z, File destDir) throws IOException {
+        destDir.mkdirs();
+        File tempDir = new File(destDir, "tmp_extract");
+        deleteRecursiveQuiet(tempDir);
+        tempDir.mkdirs();
+        try {
+            java.util.List<String> cmd = new java.util.ArrayList<>();
+            cmd.add(sevenZip.getAbsolutePath());
+            cmd.add("x");
+            cmd.add(archive7z.getAbsolutePath());
+            cmd.add("-o" + tempDir.getAbsolutePath());
+            cmd.add("-y");
+            for (String dll : REQUIRED_DLLS) {
+                cmd.add("x64/" + dll);
+            }
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            byte[] out = p.getInputStream().readAllBytes();
+            boolean done;
+            try {
+                done = p.waitFor(10, java.util.concurrent.TimeUnit.MINUTES);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Extraccion de Mesa interrumpida");
+            }
+            if (!done) {
+                p.destroyForcibly();
+                throw new IOException("7-Zip tardo demasiado (timeout 10 min)");
+            }
+            if (p.exitValue() != 0) {
+                throw new IOException("7-Zip fallo con codigo " + p.exitValue() + ": " + new String(out));
+            }
+            File x64Dir = new File(tempDir, "x64");
+            int ok = 0;
+            for (String dll : REQUIRED_DLLS) {
+                File src = new File(x64Dir, dll);
+                if (!src.isFile()) {
+                    throw new IOException("Falta " + dll + " en el .7z de Mesa");
+                }
+                Files.copy(src.toPath(), new File(destDir, dll).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                System.out.println("[Mesa] Extraido: " + dll);
+                ok++;
+            }
+            if (ok != REQUIRED_DLLS.length) {
+                throw new IOException("Solo se extrajeron " + ok + "/" + REQUIRED_DLLS.length + " DLLs");
+            }
+        } finally {
+            deleteRecursiveQuiet(tempDir);
+        }
+    }
+
+    private static void deleteRecursiveQuiet(File f) {
+        if (f == null || !f.exists()) {
+            return;
+        }
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) {
+                for (File k : kids) {
+                    deleteRecursiveQuiet(k);
+                }
+            }
+        }
+        try {
+            Files.deleteIfExists(f.toPath());
+        } catch (IOException ignored) {
+        }
     }
 
     private static void downloadWithProgress(String url, File dest, ProgressCallback callback) throws IOException, InterruptedException {
@@ -263,7 +444,7 @@ public final class MesaDownloader {
             return false;
         }
         // Copiar las 3 DLLs junto a javaw.exe
-        String[] dlls = {"opengl32.dll", "libgallium_wgl.dll", "libglapi.dll"};
+        String[] dlls = REQUIRED_DLLS;
         boolean anyCopied = false;
         for (String dll : dlls) {
             File src = new File(MESA_DIR, dll);
@@ -309,7 +490,7 @@ public final class MesaDownloader {
         if (javaDir == null) {
             return;
         }
-        String[] dlls = {"opengl32.dll", "libgallium_wgl.dll", "libglapi.dll"};
+        String[] dlls = REQUIRED_DLLS;
         for (String dll : dlls) {
             File dst = new File(javaDir, dll);
             if (dst.exists()) {
@@ -338,7 +519,7 @@ public final class MesaDownloader {
     }
 
     public static boolean isMesaAvailable() {
-        String[] dlls = {"opengl32.dll", "libgallium_wgl.dll", "libglapi.dll"};
+        String[] dlls = REQUIRED_DLLS;
         for (String dll : dlls) {
             if (!new File(MESA_DIR, dll).exists()) {
                 return false;
