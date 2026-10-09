@@ -71,10 +71,15 @@ public final class MesaDownloader {
         System.out.println("[Mesa] Descargando mesa3d-26.2.4-release-msvc.7z");
         File archive = new File(MESA_DIR, "mesa3d.7z");
         final ProgressCallback outerCb = callback;
-        downloadWithProgress(MESA_7Z_URL, archive, outerCb == null ? null : (msg, frac) -> {
-            double mapped = frac < 0 ? 0.3 : 0.1 + frac * 0.5;
-            outerCb.onProgress(msg, mapped);
-        });
+        try {
+            downloadWithProgress(MESA_7Z_URL, archive, outerCb == null ? null : (msg, frac) -> {
+                double mapped = frac < 0 ? 0.3 : 0.1 + frac * 0.5;
+                outerCb.onProgress(msg, mapped);
+            });
+        } catch (RuntimeException e) {
+            Files.deleteIfExists(archive.toPath());
+            throw e;
+        }
         // 4. Verificar SHA-256
         if (outerCb != null) {
             outerCb.onProgress("Verificando SHA-256...", 0.62);
