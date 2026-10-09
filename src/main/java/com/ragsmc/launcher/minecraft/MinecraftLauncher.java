@@ -124,8 +124,18 @@ public class MinecraftLauncher {
         ProcessBuilder pb = new ProcessBuilder(args);
         pb.directory(gameDir);
         pb.redirectErrorStream(true);
-        // Apply Mesa environment variables if needed
-        GpuDedicatedHelper.applyLinuxEnv(pb, config.isMesaCpu());
+
+        // Apply GPU/Mesa settings
+        if (config.isMesaCpu()) {
+            // Apply Mesa environment variables
+            pb.environment().put("GALLIUM_DRIVER", "llvmpipe");
+            pb.environment().put("LIBGL_ALWAYS_SOFTWARE", "1");
+            info(log, "[Launch] Aplicando modo Mesa (software rendering)");
+        }
+
+        // On Windows, GPU registry is already applied via GpuDedicatedHelper.enableForJava
+        // No additional env vars needed for GPU preference on Windows
+
         return pb.start();
     }
 

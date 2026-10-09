@@ -128,27 +128,37 @@ public final class MesaDownloader {
         }
     }
 
-    public static void applyToJava(String javaExePath) {
+    public static boolean applyToJava(String javaExePath) {
         if (!isWindows()) {
-            return;
+            return false;
         }
         File javaExe = new File(javaExePath);
         File javaDir = javaExe.getParentFile();
         if (javaDir == null) {
-            return;
+            return false;
         }
         // Copiar las 3 DLLs junto a javaw.exe
         String[] dlls = {"opengl32.dll", "libgallium_wgl.dll", "libglapi.dll"};
+        boolean anyCopied = false;
         for (String dll : dlls) {
             File src = new File(MESA_DIR, dll);
             File dst = new File(javaDir, dll);
             if (src.exists()) {
                 try {
                     Files.copy(src.toPath(), dst.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException ignored) {
+                    anyCopied = true;
+                    System.out.println("[Mesa] Copiado " + dll + " a " + javaDir.getAbsolutePath());
+                } catch (IOException e) {
+                    System.err.println("[Mesa] Error copiando " + dll + " a " + javaDir + ": " + e.getMessage());
                 }
             }
         }
+        if (anyCopied) {
+            System.out.println("[Mesa] Aplicado a: " + javaExePath);
+        } else {
+            System.err.println("[Mesa] No se encontraron DLLs en " + MESA_DIR.getAbsolutePath());
+        }
+        return anyCopied;
     }
 
     public static void removeFromAllJava() {
@@ -156,9 +166,13 @@ public final class MesaDownloader {
             return;
         }
         java.util.Map<Integer, String> found = com.ragsmc.launcher.minecraft.JavaVersionSelector.scanAll();
+        System.out.println("[Mesa] Removiendo de " + found.size() + " JVMs...");
+        int count = 0;
         for (String path : found.values()) {
             removeFromJava(path);
+            count++;
         }
+        System.out.println("[Mesa] Total: " + count + " JVMs limpiadas");
     }
 
     public static void removeFromJava(String javaExePath) {
@@ -176,7 +190,9 @@ public final class MesaDownloader {
             if (dst.exists()) {
                 try {
                     Files.deleteIfExists(dst.toPath());
-                } catch (IOException ignored) {
+                    System.out.println("[Mesa] Removido " + dll + " de " + javaDir.getAbsolutePath());
+                } catch (IOException e) {
+                    System.err.println("[Mesa] Error removiendo " + dll + ": " + e.getMessage());
                 }
             }
         }

@@ -32,8 +32,31 @@ public final class GpuDedicatedHelper {
             );
             pb.redirectErrorStream(true);
             Process p = pb.start();
+            int exitCode = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS) ? p.exitValue() : -1;
+            System.out.println("[ForceGPU] Configurado: " + javaExePath + " (exit=" + exitCode + ")");
+            // Verify
+            verifyRegistry(javaExePath);
+        } catch (Exception e) {
+            System.err.println("[ForceGPU] Error configurando " + javaExePath + ": " + e.getMessage());
+        }
+    }
+
+    private static void verifyRegistry(String javaExePath) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "reg", "query", REG_KEY, "/v", javaExePath
+            );
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
             p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS);
-        } catch (Exception ignored) {
+            String output = new String(p.getInputStream().readAllBytes());
+            if (output.contains("GpuPreference=2")) {
+                System.out.println("[ForceGPU] Verificado OK: " + javaExePath);
+            } else {
+                System.err.println("[ForceGPU] VERIFICACION FALLIDA: " + javaExePath);
+            }
+        } catch (Exception e) {
+            System.err.println("[ForceGPU] Error verificando " + javaExePath + ": " + e.getMessage());
         }
     }
 
@@ -60,9 +83,13 @@ public final class GpuDedicatedHelper {
         }
         // Get all known Java paths from JavaVersionSelector
         java.util.Map<Integer, String> found = com.ragsmc.launcher.minecraft.JavaVersionSelector.scanAll();
+        System.out.println("[ForceGPU] Activado. Configurando " + found.size() + " JVMs...");
+        int count = 0;
         for (String path : found.values()) {
             enableForJava(path);
+            count++;
         }
+        System.out.println("[ForceGPU] Total: " + count + " JVMs configuradas");
     }
 
     public static void disableForAllKnownJava() {
@@ -70,9 +97,13 @@ public final class GpuDedicatedHelper {
             return;
         }
         java.util.Map<Integer, String> found = com.ragsmc.launcher.minecraft.JavaVersionSelector.scanAll();
+        System.out.println("[ForceGPU] Desactivado. Removiendo de " + found.size() + " JVMs...");
+        int count = 0;
         for (String path : found.values()) {
             disableForJava(path);
+            count++;
         }
+        System.out.println("[ForceGPU] Total: " + count + " JVMs desactivadas");
     }
 
     public static List<String> detectGpus() {

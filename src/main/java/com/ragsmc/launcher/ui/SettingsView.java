@@ -9,6 +9,7 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.io.File;
 import java.util.Map;
 import java.util.List;
 import java.util.TreeMap;
@@ -316,18 +317,29 @@ public class SettingsView extends JPanel {
         form.add(sectionLabel("Video"));
         gpuBox = new JCheckBox("Forzar GPU dedicada (laptops con 2 GPUs)");
         styleCheck(gpuBox);
-        // Check for dedicated GPU
+        // Check for dedicated GPU but ALWAYS enable the toggle
         boolean hasDedicated = false;
         try {
             hasDedicated = com.ragsmc.launcher.hardware.GpuDedicatedHelper.hasDedicatedGpu();
         } catch (Exception ignored) {
         }
-        if (!hasDedicated) {
-            gpuBox.setEnabled(false);
-            gpuBox.setToolTipText("No se detecto GPU dedicada");
+        final boolean finalHasDedicated = hasDedicated;
+        if (!finalHasDedicated) {
+            gpuBox.setToolTipText("ADVERTENCIA: Solo se detecto 1 GPU. Forzar GPU dedicada no tendra efecto pero podes activarlo.");
         }
         gpuBox.addActionListener(e -> {
             if (gpuBox.isSelected()) {
+                if (!finalHasDedicated) {
+                    int r = JOptionPane.showConfirmDialog(this,
+                        "Solo se detecto 1 GPU. Forzar GPU dedicada no tendra efecto visual. \u00bfDeseas continuar de todos modos?",
+                        "Advertencia",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE);
+                    if (r != JOptionPane.YES_OPTION) {
+                        gpuBox.setSelected(false);
+                        return;
+                    }
+                }
                 com.ragsmc.launcher.hardware.GpuDedicatedHelper.enableForAllKnownJava();
                 if (window != null) {
                     window.getConsoleView().appendLine("Forzar GPU dedicada: ACTIVADO para todos los Java detectados");
@@ -342,19 +354,65 @@ public class SettingsView extends JPanel {
         form.add(gpuBox);
         mesaBox = new JCheckBox("Forzar CPU - render por software (Mesa, GPUs muy viejas)");
         styleCheck(mesaBox);
+        // Habilitado con fallback manual ya que MESA_URL no esta configurado
         if (!com.ragsmc.launcher.hardware.MesaDownloader.isConfigured()) {
-            mesaBox.setEnabled(false);
-            mesaBox.setToolTipText("Mesa no configurado (falta URL y SHA-256 en el codigo)");
+            mesaBox.setToolTipText("Mesa no configurado automaticamente. Al activar, se te guiara para descargar manualmente.");
         }
         mesaBox.addActionListener(e -> {
             if (mesaBox.isSelected()) {
                 int r = JOptionPane.showConfirmDialog(this,
-                    "Modo Mesa: Minecraft correra por software (CPU). Es MUY lento pero funciona en GPUs que no soportan OpenGL 3.2. ¿Continuar?",
+                    "Modo Mesa: Minecraft correra por software (CPU). Es MUY lento pero funciona en GPUs que no soportan OpenGL 3.2.\n\n" +
+                    "Necesitas descargar Mesa3D manualmente:\n" +
+                    "1. Descarga mesa3d-opengl32-x64.zip desde https://github.com/pal1000/mesa-dist-win/releases\n" +
+                    "2. Extrae las 3 DLLs (opengl32.dll, libgallium_wgl.dll, libglapi.dll)\n" +
+                    "3. Colocalas en %APPDATA%\\\\RagsMC\\\\mesa3d\\\\n\n" +
+                    "Deseas continuar?",
                     "Confirmar modo Mesa",
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.WARNING_MESSAGE);
                 if (r != JOptionPane.YES_OPTION) {
                     mesaBox.setSelected(false);
+                    return;
+                }
+                // Abrir carpeta para que el usuario coloque las DLLs
+                File mesaDir = com.ragsmc.launcher.hardware.MesaDownloader.getMesaDir();
+                mesaDir.mkdirs();
+                try {
+                    java.awt.Desktop.getDesktop().open(mesaDir);
+                } catch (Exception ignored) {}
+                int r2 = JOptionPane.showConfirmDialog(this,
+                    "Se abrio la carpeta " + mesaDir.getAbsolutePath() + ".\n" +
+                    "Por favor coloca las 3 DLLs (opengl32.dll, libgallium_wgl.dll, libglapi.dll) ahi.\n" +
+                    "Luego haz click en OK para copiarlas a cada Java detectado.",
+                    "Mesa - Colocar DLLs",
+                    JOptionPane.OK_CANCEL_OPTION,
+                    JOptionPane.INFORMATION_MESSAGE);
+                if (r2 != JOptionPane.OK_OPTION) {
+                    mesaBox.setSelected(false);
+                    return;
+                }
+                // Copiar DLLs a cada Java detectado
+                java.util.Map<Integer, String> found = com.ragsmc.launcher.minecraft.JavaVersionSelector.scanAll();
+                int copied = 0;
+                for (String path : found.values()) {
+                    if (com.ragsmc.launcher.hardware.MesaDownloader.applyToJava(path)) {
+                        copied++;
+                    }
+                }
+                if (window != null) {
+                    window.getConsoleView().appendLine("Mesa: DLLs copiadas a " + copied + " JVMs");
+                }
+                if (copied == 0) {
+                    JOptionPane.showMessageDialog(this,
+                        "No se pudo copiar a ningun Java. Verifica que las DLLs estan en la carpeta.",
+                        "Error Mesa", JOptionPane.ERROR_MESSAGE);
+                    mesaBox.setSelected(false);
+                }
+            } else {
+                // Remover Mesa de todos los Java
+                com.ragsmc.launcher.hardware.MesaDownloader.removeFromAllJava();
+                if (window != null) {
+                    window.getConsoleView().appendLine("Mesa: DLLs removidas de todos los Java detectados");
                 }
             }
         });
