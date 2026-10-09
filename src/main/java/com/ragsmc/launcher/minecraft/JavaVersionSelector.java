@@ -13,6 +13,11 @@ public final class JavaVersionSelector {
     private JavaVersionSelector() {
     }
 
+    // Cache for findJava results (1 hour TTL)
+    private static final java.util.Map<Integer, java.util.Optional<String>> javaCache = new java.util.HashMap<>();
+    private static final java.util.Map<Integer, Long> javaCacheTime = new java.util.HashMap<>();
+    private static final long CACHE_TTL_MS = 3600_000; // 1 hour
+
     public static int requiredMajor(String mcVersion) {
         if (mcVersion == null) {
             return 17;
@@ -64,6 +69,8 @@ public final class JavaVersionSelector {
         Optional<String> mojang = findMojangJava(major);
         if (mojang.isPresent()) {
             System.out.println("[JavaSelector] Java requerido: " + major + ", Java a usar: " + mojang.get() + " (Mojang runtime)");
+            javaCache.put(major, mojang);
+            javaCacheTime.put(major, System.currentTimeMillis());
             return mojang;
         }
         // 2. Runtimes propios de RagsMC (%APPDATA%/RagsMC/runtimes/java-<version>/)
@@ -75,6 +82,8 @@ public final class JavaVersionSelector {
                 try {
                     if (probeMajor(bin.getAbsolutePath()) == major) {
                         System.out.println("[JavaSelector] Java requerido: " + major + ", Java a usar: " + bin.getAbsolutePath() + " (RagsMC runtime)");
+                        javaCache.put(major, Optional.of(bin.getAbsolutePath()));
+                        javaCacheTime.put(major, System.currentTimeMillis());
                         return Optional.of(bin.getAbsolutePath());
                     }
                 } catch (Exception ignored) {
@@ -116,6 +125,8 @@ public final class JavaVersionSelector {
                 int found = probeMajor(bin);
                 if (found == major || (major == 16 && found >= 16 && found <= 20)) {
                     System.out.println("[JavaSelector] Java requerido: " + major + ", Java a usar: " + bin + " (sistema)");
+                    javaCache.put(major, Optional.of(bin));
+                    javaCacheTime.put(major, System.currentTimeMillis());
                     return Optional.of(bin);
                 }
             } catch (Exception ignored) {
@@ -129,6 +140,8 @@ public final class JavaVersionSelector {
             return j8;
         }
         System.out.println("[JavaSelector] Java requerido: " + major + ", NO ENCONTRADO");
+        javaCache.put(major, Optional.empty());
+        javaCacheTime.put(major, System.currentTimeMillis());
         return Optional.empty();
     }
 
