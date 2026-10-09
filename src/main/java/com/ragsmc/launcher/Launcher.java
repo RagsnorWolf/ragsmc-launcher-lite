@@ -284,6 +284,129 @@ public class Launcher {
         com.ragsmc.launcher.util.Logger.info("Java auto para " + version + " (requiere " + requiredJava + "): " + auto);
         return auto;
     }
+
+    private String promptDownloadJava(int requiredJava, String mcVersion) {
+        Object[] options = {"Descargar automaticamente", "Configurar ruta manualmente", "Cancelar"};
+        int choice = JOptionPane.showOptionDialog(window,
+            "Minecraft " + mcVersion + " necesita Java " + requiredJava + " y no se encontro instalado.\n\n" +
+            "\u00bfQuieres que lo descargue automaticamente desde Adoptium?",
+            "Falta Java " + requiredJava,
+            JOptionPane.YES_NO_CANCEL_OPTION,
+            JOptionPane.QUESTION_MESSAGE,
+            null, options, options[0]);
+
+        if (choice == 0) {
+            // Descargar automáticamente
+            return downloadAndInstallJava(requiredJava);
+        } else if (choice == 1) {
+            // Abrir ajustes
+            window.showView("settings");
+            return null;
+        }
+        return null;
+    }
+
+    private String downloadAndInstallJava(final int major) {
+        final int requiredJava = major;
+        JDialog dlg = new JDialog(window, "Descargando Java " + major, true);
+        dlg.setLayout(new BorderLayout(10, 10));
+        dlg.setSize(480, 180);
+        dlg.setLocationRelativeTo(window);
+        JLabel label = new JLabel("Conectando con Adoptium...");
+        JProgressBar bar = new JProgressBar(0, 100);
+        bar.setStringPainted(true);
+        bar.setIndeterminate(true);
+        JLabel speedLabel = new JLabel("");
+        speedLabel.setForeground(Colors.TEXT_SECONDARY);
+        speedLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        javax.swing.JButton cancel = new javax.swing.JButton("Cancelar");
+        JPanel top = new JPanel(new BorderLayout(10, 5));
+        top.add(label, BorderLayout.NORTH);
+        top.add(speedLabel, BorderLayout.SOUTH);
+        dlg.add(top, BorderLayout.NORTH);
+        dlg.add(bar, BorderLayout.CENTER);
+        dlg.add(cancel, BorderLayout.SOUTH);
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        cancel.addActionListener(e -> {
+            cancelled.set(true);
+            cancel.setEnabled(false);
+            cancel.setText("Cancelando...");
+        });
+        final long startTime = System.nanoTime();
+        SwingWorker<String, String> worker = new SwingWorker<String, String>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                File dest = com.ragsmc.launcher.minecraft.JavaDownloader.downloadJava(major, (done, total) -> {
+                    if (cancelled.get()) {
+                        throw new RuntimeException("cancelado");
+                    }
+                    if (total > 0) {
+                        publish(done + "|" + total);
+                    } else {
+                        publish(done + "|-1");
+                    }
+                });
+                return dest.getAbsolutePath();
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                for (String c : chunks) {
+                    int sep = c.lastIndexOf("|");
+                    if (sep < 0) continue;
+                    try {
+                        long done = Long.parseLong(c.substring(0, sep));
+                        long total = Long.parseLong(c.substring(sep + 1));
+                        long elapsedMs = (System.nanoTime() - startTime) / 1_000_000;
+                        double speedMBs = 0;
+                        if (elapsedMs > 0) {
+                            speedMBs = (done / 1048576.0) / (elapsedMs / 1000.0);
+                        }
+                        if (total > 0) {
+                            int pct = (int) (done * 100 / total);
+                            bar.setIndeterminate(false);
+                            bar.setValue(Math.max(0, Math.min(100, pct)));
+                            double remainingMB = (total - done) / 1048576.0;
+                            double etaSec = speedMBs > 0 ? remainingMB / speedMBs : -1;
+                            String etaStr = etaSec > 0 ? String.format("ETA: %.0fs", etaSec) : "";
+                            label.setText(String.format("%.1f / %.1f MB", done / 1048576.0, total / 1048576.0));
+                            speedLabel.setText(String.format("%.2f MB/s  %s", speedMBs, etaStr));
+                        } else {
+                            label.setText(String.format("%.1f MB descargados", done / 1048576.0));
+                            speedLabel.setText(String.format("%.2f MB/s", speedMBs));
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            @Override
+            protected void done() {
+                dlg.dispose();
+                try {
+                    String path = get();
+                    Settings cur = settingsPersistence.load();
+                    cur.javaPath = path;
+                    settingsPersistence.save(cur);
+                    window.getSettingsView().loadValues(path, cur.ramMb, 854, 480, false);
+                    scanJavaAtStartup();
+                    window.getConsoleView().appendLine("Java " + requiredJava + " instalado: " + path);
+                    // Reintentar lanzamiento
+                    launchSelected();
+                } catch (Exception ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : ex.toString();
+                    if (msg.contains("cancelado")) {
+                        window.getConsoleView().appendLine("Descarga de Java cancelada.");
+                    } else {
+                        showError("Fallo la descarga de Java", msg);
+                    }
+                }
+            }
+        };
+        worker.execute();
+        dlg.setVisible(true);
+        return null; // El worker reintentará el lanzamiento al terminar
+    }
+
     private void launchSelected() {
         InstanceStore.Instance in = window.getPlayView().getSelectedInstance();
         if (in == null) {
