@@ -111,8 +111,8 @@ public final class JavaVersionSelector {
             if (v.startsWith("23w") || v.startsWith("24w") || v.startsWith("25w")) {
                 return 17;
             }
-            // Java 21 (1.21.x, 1.22+ y futuras)
-            if (v.startsWith("1.21") || compare(v, "1.22") >= 0) {
+            // Java 21 (26.x, 1.21.x y futuras)
+            if (v.startsWith("26.") || v.startsWith("1.21") || compare(v, "1.22") >= 0) {
                 return 21;
             }
             // Java 17
