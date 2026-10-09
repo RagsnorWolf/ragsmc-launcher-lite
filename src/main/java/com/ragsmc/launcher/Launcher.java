@@ -61,6 +61,8 @@ public class Launcher {
     }
 
     public void wire() {
+        // Precargar en background al iniciar
+        precacheOnStartup();
         wireProfiles();
         wirePlay();
         wireHome();
@@ -69,6 +71,27 @@ public class Launcher {
         wireContentDirs();
         wireInstallations();
         refreshInstallations();
+    }
+
+    private void precacheOnStartup() {
+        new Thread(() -> {
+            try {
+                // Precargar detección de Java
+                java.util.Map<Integer, String> javas = JavaVersionSelector.scanAll();
+                com.ragsmc.launcher.util.Logger.info("[PRECACHE] Java detectados: " + javas.size());
+                
+                // Precargar versiones instaladas
+                List<String> installedVersions = this.versions.installedVersions(AppDirs.versionsDir());
+                com.ragsmc.launcher.util.Logger.info("[PRECACHE] Versiones instaladas: " + installedVersions.size());
+                
+                // Precargar instancias
+                List<InstanceStore.Instance> insts = instances.all();
+                com.ragsmc.launcher.util.Logger.info("[PRECACHE] Instancias: " + insts.size());
+                
+            } catch (Exception e) {
+                com.ragsmc.launcher.util.Logger.info("[PRECACHE] Error: " + e.getMessage());
+            }
+        }).start();
     }
 
     private static File jdkCacheFile() {
