@@ -18,6 +18,84 @@ public final class JavaVersionSelector {
     private static final java.util.Map<Integer, Long> javaCacheTime = new java.util.HashMap<>();
     private static final long CACHE_TTL_MS = 3600_000; // 1 hour
 
+    /** Parsea "1.8.0_401" -> 8, "17.0.8" -> 17, "21.0.12.1" -> 21, "8" -> 8. Devuelve -1 si no parseable. */
+    public static int parseJavaMajor(String versionString) {
+        if (versionString == null) {
+            return -1;
+        }
+        String v = versionString.trim().replace("\"", "").replace("'", "");
+        if (v.isEmpty()) {
+            return -1;
+        }
+        try {
+            if (v.startsWith("1.")) {
+                String[] parts = v.split("\\.");
+                if (parts.length >= 2) {
+                    return Integer.parseInt(parts[1].replaceAll("[^0-9]", ""));
+                }
+                return -1;
+            }
+            String[] parts = v.split("\\.");
+            return Integer.parseInt(parts[0].replaceAll("[^0-9]", ""));
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** Devuelve javaw.exe si existe, si no java.exe, si no null. */
+    private static File findJavaExeInDir(File binDirParent) {
+        if (binDirParent == null) {
+            return null;
+        }
+        File bin;
+        if (isWindows()) {
+            bin = new File(binDirParent, "bin" + File.separator + "javaw.exe");
+            if (bin.isFile()) {
+                return bin;
+            }
+            bin = new File(binDirParent, "bin" + File.separator + "java.exe");
+            if (bin.isFile()) {
+                return bin;
+            }
+        } else {
+            bin = new File(binDirParent, "bin" + File.separator + "java");
+            if (bin.isFile()) {
+                return bin;
+            }
+        }
+        return null;
+    }
+
+    /** Agrega candidatos de un directorio base (un nivel de subdirectorios). */
+    private static void addCandidatesFromDir(List<String> candidates, File baseDir) {
+        if (baseDir == null || !baseDir.isDirectory()) {
+            return;
+        }
+        File[] subs = baseDir.listFiles(File::isDirectory);
+        if (subs == null) {
+            return;
+        }
+        for (File sub : subs) {
+            File exe = findJavaExeInDir(sub);
+            if (exe != null) {
+                String abs = exe.getAbsolutePath();
+                if (!candidates.contains(abs)) {
+                    candidates.add(abs);
+                }
+            }
+        }
+    }
+
+    public static void clearJavaCache(int major) {
+        javaCache.remove(major);
+        javaCacheTime.remove(major);
+    }
+
+    public static void clearAllJavaCache() {
+        javaCache.clear();
+        javaCacheTime.clear();
+    }
+
     public static int requiredMajor(String mcVersion) {
         if (mcVersion == null) {
             return 17;
@@ -99,22 +177,14 @@ public final class JavaVersionSelector {
             "C:/Program Files/Java",
             "C:/Program Files (x86)/Java",
             "C:/Program Files/Microsoft",
+            "C:/Program Files/Zulu",
+            "C:/Program Files/BellSoft",
             "C:/Program Files/Semeru",
             "/usr/lib/jvm",
             "/usr/local/lib/java"
         };
         for (String root : roots) {
-            File dir = new File(root);
-            File[] subs = dir.listFiles(File::isDirectory);
-            if (subs == null) {
-                continue;
-            }
-            for (File sub : subs) {
-                File bin = new File(sub, "bin" + File.separator + "java" + (isWindows() ? ".exe" : ""));
-                if (bin.isFile()) {
-                    candidates.add(bin.getAbsolutePath());
-                }
-            }
+            addCandidatesFromDir(candidates, new File(root));
         }
         String home = System.getProperty("java.home", "");
         if (!home.isEmpty()) {
@@ -233,7 +303,7 @@ public final class JavaVersionSelector {
         if (lower.contains("32-bit") || (lower.contains("x86") && !lower.contains("x64"))) {
             throw new Exception("JVM 32 bits rechazada");
         }
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"(\\d+)(?:\\.(\\d+))?\"").matcher(s);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"(\\d+)(?:\\.(\\d+))?").matcher(s);
         if (m.find()) {
             int first = Integer.parseInt(m.group(1));
             if (first == 1 && m.group(2) != null) {
@@ -302,10 +372,10 @@ public final class JavaVersionSelector {
                 }
                 String version = props.getProperty("JAVA_VERSION", "");
                 if (!version.isEmpty()) {
-                    // Parsear "8", "17", "21", "17.0.8", etc.
-                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(version);
-                    if (m.find()) {
-                        return Integer.parseInt(m.group(1));
+                    // Parsear "1.8.0_401" -> 8, "17.0.8" -> 17, "21" -> 21
+                    int parsed = parseJavaMajor(version);
+                    if (parsed > 0) {
+                        return parsed;
                     }
                 }
             }
@@ -339,48 +409,124 @@ public final class JavaVersionSelector {
 
     public static java.util.Map<Integer, String> scanAll() {
         java.util.Map<Integer, String> found = new java.util.TreeMap<>();
-        List<String> roots = new ArrayList<>();
-        String javaHome = System.getenv("JAVA_HOME");
-        if (javaHome != null && !javaHome.isEmpty()) {
-            roots.add(javaHome);
-        }
-        String pathEnv = System.getenv("PATH");
-        if (pathEnv != null) {
-            for (String p : pathEnv.split(java.util.regex.Pattern.quote(File.separator.equals("/") ? ":" : ";"))) {
-                File bin = new File(p.trim(), "java" + (isWindows() ? ".exe" : ""));
-                if (bin.isFile()) {
+        // 1. JAVA_HOME (javaw primero, luego java)
+        try {
+            String javaHome = System.getenv("JAVA_HOME");
+            if (javaHome != null && !javaHome.isEmpty()) {
+                File homeDir = new File(javaHome.trim());
+                File exe = findJavaExeInDir(homeDir);
+                if (exe != null) {
                     try {
-                        found.putIfAbsent(probeMajor(bin.getAbsolutePath()), bin.getAbsolutePath());
+                        int major = probeMajor(exe.getAbsolutePath());
+                        if (found.putIfAbsent(major, exe.getAbsolutePath()) == null) {
+                            System.out.println("[JavaScanner] Detectado: Java " + major + " en " + exe.getAbsolutePath() + " (JAVA_HOME)");
+                        }
                     } catch (Exception ignored) {
                     }
                 }
             }
+        } catch (Exception ignored) {
         }
+        // 2. PATH (where javaw / java)
+        try {
+            String pathEnv = System.getenv("PATH");
+            if (pathEnv != null) {
+                for (String p : pathEnv.split(java.util.regex.Pattern.quote(File.separator.equals("/") ? ":" : ";"))) {
+                    String dir = p == null ? "" : p.trim();
+                    if (dir.isEmpty()) {
+                        continue;
+                    }
+                    for (String exeName : (isWindows() ? new String[]{"javaw.exe", "java.exe"} : new String[]{"java"})) {
+                        File bin = new File(dir, exeName);
+                        if (bin.isFile()) {
+                            try {
+                                int major = probeMajor(bin.getAbsolutePath());
+                                if (found.putIfAbsent(major, bin.getAbsolutePath()) == null) {
+                                    System.out.println("[JavaScanner] Detectado: Java " + major + " en " + bin.getAbsolutePath() + " (PATH)");
+                                }
+                            } catch (Exception ignored) {
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // 3. Runtimes de Mojang (rutas exactas + recursivo)
         scanMojangRuntimes(found);
+        // 4. Directorios de instalaciones conocidas
         String[] baseDirs = {
             "C:/Program Files/Eclipse Adoptium",
             "C:/Program Files/Java",
             "C:/Program Files (x86)/Java",
             "C:/Program Files/Microsoft",
+            "C:/Program Files/Zulu",
+            "C:/Program Files/BellSoft",
             "C:/Program Files/Semeru",
             "/usr/lib/jvm",
             "/usr/local/lib/java"
         };
         for (String base : baseDirs) {
-            File dir = new File(base);
-            File[] subs = dir.listFiles(File::isDirectory);
-            if (subs == null) {
-                continue;
+            List<String> cands = new ArrayList<>();
+            addCandidatesFromDir(cands, new File(base));
+            for (String abs : cands) {
+                try {
+                    int major = probeMajor(abs);
+                    if (found.putIfAbsent(major, abs) == null) {
+                        System.out.println("[JavaScanner] Detectado: Java " + major + " en " + abs);
+                    }
+                } catch (Exception ignored) {
+                }
             }
-            for (File sub : subs) {
-                File bin = new File(sub, "bin" + File.separator + "java" + (isWindows() ? ".exe" : ""));
-                if (bin.isFile()) {
+        }
+        // 5. Runtimes propios de RagsMC
+        try {
+            String appdata = System.getenv("APPDATA");
+            File ragsBase = appdata != null && !appdata.isEmpty()
+                    ? new File(appdata, "RagsMC" + File.separator + "runtimes")
+                    : new File(System.getProperty("user.home"), ".ragsmc" + File.separator + "runtimes");
+            if (ragsBase.isDirectory()) {
+                File[] subs = ragsBase.listFiles(File::isDirectory);
+                if (subs != null) {
+                    for (File sub : subs) {
+                        File exe = findJavaExeInDir(sub);
+                        if (exe != null) {
+                            try {
+                                int major = probeMajor(exe.getAbsolutePath());
+                                if (found.putIfAbsent(major, exe.getAbsolutePath()) == null) {
+                                    System.out.println("[JavaScanner] Detectado: Java " + major + " en " + exe.getAbsolutePath() + " (RagsMC)");
+                                }
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // 6. java.home actual como ultimo recurso
+        try {
+            String home = System.getProperty("java.home", "");
+            if (!home.isEmpty()) {
+                File exe = findJavaExeInDir(new File(home).getParentFile());
+                if (exe == null) {
+                    File direct = new File(home, "bin" + File.separator + (isWindows() ? "javaw.exe" : "java"));
+                    if (direct.isFile()) {
+                        exe = direct;
+                    }
+                }
+                if (exe != null) {
                     try {
-                        found.putIfAbsent(probeMajor(bin.getAbsolutePath()), bin.getAbsolutePath());
+                        int major = probeMajor(exe.getAbsolutePath());
+                        if (found.putIfAbsent(major, exe.getAbsolutePath()) == null) {
+                            System.out.println("[JavaScanner] Detectado: Java " + major + " en " + exe.getAbsolutePath() + " (java.home)");
+                        }
                     } catch (Exception ignored) {
                     }
                 }
             }
+        } catch (Exception ignored) {
         }
         System.out.println("[JavaScanner] Total: " + found.size() + " JDKs detectados");
         return found;
