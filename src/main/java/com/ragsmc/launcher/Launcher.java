@@ -432,6 +432,27 @@ public class Launcher {
         return null; // El worker reintentará el lanzamiento al terminar
     }
 
+    private void abortLaunch(String status) {
+        isLaunching.set(false);
+        window.getPlayView().setLaunching(false);
+        if (status != null) {
+            window.getPlayView().setStatus(status);
+        }
+        com.ragsmc.launcher.util.Logger.info("[Launch] Reset isLaunching=false, boton JUGAR habilitado. Motivo: " + status);
+    }
+
+    private void finishLaunch(String iid) {
+        isLaunching.set(false);
+        window.getPlayView().setLaunching(false);
+        window.getPlayView().setStatus("Listo para jugar");
+        try {
+            instances.markPlayed(iid);
+            refreshInstallations();
+        } catch (Exception ignored) {
+        }
+        com.ragsmc.launcher.util.Logger.info("[Minecraft] Launcher restaurado. Listo para siguiente lanzamiento.");
+    }
+
     private void launchSelected() {
         tLaunchStart = System.nanoTime();
         com.ragsmc.launcher.util.Logger.info("[TIMING] launchSelected START");
@@ -466,6 +487,7 @@ public class Launcher {
         long maxRam = com.ragsmc.launcher.util.SystemInfo.maxUsableRamMb();
         if (ram > maxRam) {
             showError("RAM excesiva", "El maximo usable es " + maxRam + " MB.");
+            abortLaunch("Listo para jugar");
             return;
         }
         if (ram != in.ramMb) {
@@ -486,12 +508,14 @@ public class Launcher {
             settingsPersistence.save(s);
         } catch (Exception ignored) {
         }
+        com.ragsmc.launcher.util.Logger.info("[Launch] Iniciando Minecraft " + in.version);
+        com.ragsmc.launcher.util.Logger.info("[Launch] Java requerido: " + JavaVersionSelector.requiredMajor(in.version));
         String javaPath = resolveJava(in.version);
         if (javaPath == null) {
-            isLaunching.set(false);
-            window.getPlayView().setLaunching(false);
+            abortLaunch("Listo para jugar");
             return;
         }
+        com.ragsmc.launcher.util.Logger.info("[Launch] Java encontrado: " + javaPath);
         launchExistingInstance(in, username, javaPath, null, 25565);
     }
 
@@ -535,8 +559,7 @@ public class Launcher {
                             Object[] options = {msg, noWarn};
                             int result = javax.swing.JOptionPane.showConfirmDialog(window, options, "Advertencia de compatibilidad", javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE);
                             if (result != javax.swing.JOptionPane.OK_OPTION) {
-                                window.getPlayView().setLaunching(false);
-                                window.getPlayView().setStatus("Lanzamiento cancelado por el usuario.");
+                                abortLaunch("Lanzamiento cancelado por el usuario.");
                                 return;
                             }
                             if (noWarn.isSelected()) {
@@ -559,8 +582,8 @@ public class Launcher {
                         window.getPlayView().setLaunching(false);
                         List<String> resto = versions.missingParts(in.version, AppDirs.gameDir());
                         if (!resto.isEmpty()) {
-                            window.getPlayView().setStatus("Descarga incompleta. Revisa la consola.");
                             showError("Descarga incompleta", "Sigue faltando: " + String.join(", ", resto));
+                            abortLaunch("Descarga incompleta. Revisa la consola.");
                             return;
                         }
                         launchExistingInstance(instances.byId(in.id) != null ? instances.byId(in.id) : in, username, javaPath, serverIp, serverPort);
@@ -638,8 +661,7 @@ public class Launcher {
                     });
                 } catch (Exception ex) {
                     showError("Error descargando Mesa", ex.getMessage());
-                    window.getPlayView().setLaunching(false);
-                    window.getPlayView().setStatus("Error al descargar Mesa");
+                    abortLaunch("Error al descargar Mesa");
                     return;
                 }
             }
@@ -660,20 +682,24 @@ public class Launcher {
         LauncherLifecycle.launchAndManage(window,
                 () -> {
                     try {
+                        com.ragsmc.launcher.util.Logger.info("[Launch] Spawneando proceso...");
                         Process started = MinecraftLauncher.launch(cfg, console::appendLine);
+                        try {
+                            com.ragsmc.launcher.util.Logger.info("[Launch] PID: " + started.pid());
+                        } catch (Exception ignored) {
+                        }
                         markVersionReady(ver);
                         return started;
                     } catch (Exception e) {
                         clearVersionReady(ver);
+                        com.ragsmc.launcher.util.Logger.info("[Launch] Fallo el spawn: " + e.getMessage());
                         throw new RuntimeException(e.getMessage(), e);
                     }
                 },
                 console::appendLine,
                 () -> {
-                    window.getPlayView().setLaunching(false);
-                    window.getPlayView().setStatus("Listo para jugar");
-                    instances.markPlayed(iid);
-                    refreshInstallations();
+                    com.ragsmc.launcher.util.Logger.info("[Minecraft] Proceso terminado. Restaurando launcher...");
+                    finishLaunch(iid);
                 },
                 hideOnLaunch);
     }
@@ -922,8 +948,7 @@ public class Launcher {
                         versions.setStats(null);
                         dlg.dispose();
                         showError("Fallo la descarga", msg);
-                        window.getPlayView().setLaunching(false);
-                        window.getPlayView().setStatus("Fallo la descarga. Revisa la consola.");
+                        abortLaunch("Fallo la descarga. Revisa la consola.");
                         return;
                     }
                     if (msg.equals("OK")) {
@@ -1104,6 +1129,12 @@ public class Launcher {
             }
         });
         window.getInstallationsView().setOnPlay(in -> {
+            if (!isLaunching.compareAndSet(false, true)) {
+                com.ragsmc.launcher.util.Logger.info("[Launch] Ya hay un lanzamiento en curso, ignorando click");
+                return;
+            }
+            com.ragsmc.launcher.util.Logger.info("[Launch] Iniciando Minecraft " + in.version + " (desde Instalaciones)");
+            window.getPlayView().setLaunching(true);
             String username = settingsPersistence.load().username;
             if (username == null || username.isEmpty()) {
                 Account sel = auth.selected();
@@ -1111,6 +1142,7 @@ public class Launcher {
             }
             String javaPath = resolveJava(in.version);
             if (javaPath == null) {
+                abortLaunch("Listo para jugar");
                 return;
             }
             InstanceStore.Instance fresh = instances.byId(in.id) != null ? instances.byId(in.id) : in;
@@ -1148,6 +1180,12 @@ public class Launcher {
         com.ragsmc.launcher.ui.InstanceDetailView dlg =
                 new com.ragsmc.launcher.ui.InstanceDetailView(window, fresh, modrinth);
         dlg.setOnPlay(() -> {
+            if (!isLaunching.compareAndSet(false, true)) {
+                com.ragsmc.launcher.util.Logger.info("[Launch] Ya hay un lanzamiento en curso, ignorando click");
+                return;
+            }
+            com.ragsmc.launcher.util.Logger.info("[Launch] Iniciando Minecraft " + fresh.version + " (desde Contenido)");
+            window.getPlayView().setLaunching(true);
             String username = settingsPersistence.load().username;
             if (username == null || username.isEmpty()) {
                 Account sel = auth.selected();
@@ -1155,6 +1193,7 @@ public class Launcher {
             }
             String javaPath = resolveJava(fresh.version);
             if (javaPath == null) {
+                abortLaunch("Listo para jugar");
                 return;
             }
             launchExistingInstance(fresh, username, javaPath, null, 25565);
