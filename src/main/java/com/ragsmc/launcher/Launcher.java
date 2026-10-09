@@ -295,10 +295,8 @@ public class Launcher {
         }
         java.util.Optional<String> found = JavaVersionSelector.findJava(requiredJava);
         if (!found.isPresent()) {
-            showError("Falta Java " + requiredJava,
-                    "Minecraft " + version + " necesita Java " + requiredJava + " y no se encontro instalado.\n"
-                    + "Descargalo gratis en https://adoptium.net/ o configura la ruta en Ajustes.");
-            return null;
+            com.ragsmc.launcher.util.Logger.info("[Launch] Java " + requiredJava + " NO encontrado para Minecraft " + version + ". Mostrando dialogo de descarga.");
+            return promptDownloadJava(requiredJava, version);
         }
         String auto = found.get();
         s.javaPath = auto;
@@ -415,14 +413,21 @@ public class Launcher {
                     window.getSettingsView().loadValues(path, cur.ramMb, 854, 480, false);
                     scanJavaAtStartup();
                     window.getConsoleView().appendLine("Java " + requiredJava + " instalado: " + path);
+                    JavaVersionSelector.clearJavaCache(requiredJava);
+                    com.ragsmc.launcher.util.Logger.info("[Launch] Java " + requiredJava + " descargado. Reintentando lanzamiento...");
+                    // Liberar el lock para que el reintento pueda adquirirlo
+                    isLaunching.set(false);
+                    window.getPlayView().setLaunching(false);
                     // Reintentar lanzamiento
                     launchSelected();
                 } catch (Exception ex) {
                     String msg = ex.getMessage() != null ? ex.getMessage() : ex.toString();
                     if (msg.contains("cancelado")) {
                         window.getConsoleView().appendLine("Descarga de Java cancelada.");
+                        abortLaunch("Descarga de Java cancelada.");
                     } else {
                         showError("Fallo la descarga de Java", msg);
+                        abortLaunch("Fallo la descarga de Java.");
                     }
                 }
             }
